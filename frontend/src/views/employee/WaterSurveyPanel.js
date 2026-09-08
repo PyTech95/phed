@@ -78,6 +78,9 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
   const [altMobile, setAltMobile] = useState('');
   // new connection fields
   const [nc, setNc] = useState({ owner_name: property.owner_name || '', ward: property.ward || '', address: property.address || '', locality: property.colony || '', service: 'Both', category: 'Domestic', relationship: '', change_reason: '' });
+  // Common relationships for Death transfer (मृतक owner से रिश्ता); last option = Other (type free text)
+  const REL_OPTIONS = ['बेटा (Son)', 'बेटी (Daughter)', 'पत्नी (Wife)', 'पति (Husband)', 'पिता (Father)', 'माता (Mother)', 'भाई (Brother)', 'बहन (Sister)', 'पोता (Grandson)', 'पोती (Granddaughter)', 'बहू (Daughter-in-law)', 'दामाद (Son-in-law)'];
+  const [relOther, setRelOther] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [deniedReason, setDeniedReason] = useState(null); // 'SELF' | 'TENANT' | 'OTHER'
   const [docs, setDocs] = useState({}); // type -> File (single-file docs)
@@ -508,7 +511,27 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
                       <button type="button" onClick={() => setOwnerChange('OWNERSHIP_CHANGE')} data-testid="owner-change-btn" className={`h-10 rounded-lg border text-xs font-medium ${ownerChange === 'OWNERSHIP_CHANGE' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-600'}`}>Ownership change</button>
                     </div>
                     {ownerChange && <div className="mt-2"><div className="text-xs font-medium mb-1 text-slate-600">New owner का नाम *</div><Input className="h-11" value={nc.owner_name} onChange={(e) => setNc({ ...nc, owner_name: e.target.value })} data-testid="new-owner-name-input" /></div>}
-                    {ownerChange === 'DEATH_TRANSFER' && <div className="mt-2"><div className="text-xs font-medium mb-1 text-slate-600">मृतक owner से रिश्ता (relationship) *</div><Input className="h-11" value={nc.relationship} onChange={(e) => setNc({ ...nc, relationship: e.target.value })} data-testid="relationship-input" placeholder="जैसे बेटा / पत्नी / भाई" /></div>}
+                    {ownerChange === 'DEATH_TRANSFER' && (
+                      <div className="mt-2">
+                        <div className="text-xs font-medium mb-1 text-slate-600">मृतक owner से रिश्ता (relationship) *</div>
+                        <select
+                          className="w-full h-11 border rounded-lg px-3 bg-white"
+                          value={relOther ? '__OTHER__' : (REL_OPTIONS.includes(nc.relationship) ? nc.relationship : (nc.relationship ? '__OTHER__' : ''))}
+                          onChange={(e) => {
+                            if (e.target.value === '__OTHER__') { setRelOther(true); setNc({ ...nc, relationship: REL_OPTIONS.includes(nc.relationship) ? '' : nc.relationship }); }
+                            else { setRelOther(false); setNc({ ...nc, relationship: e.target.value }); }
+                          }}
+                          data-testid="relationship-select"
+                        >
+                          <option value="">रिश्ता चुनें…</option>
+                          {REL_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                          <option value="__OTHER__">अन्य (Other) — खुद लिखें</option>
+                        </select>
+                        {(relOther || (nc.relationship && !REL_OPTIONS.includes(nc.relationship))) && (
+                          <Input className="h-11 mt-2" value={nc.relationship} onChange={(e) => setNc({ ...nc, relationship: e.target.value })} data-testid="relationship-input" placeholder="रिश्ता लिखें (जैसे भतीजा / चाचा / अन्य)" />
+                        )}
+                      </div>
+                    )}
                     {ownerChange === 'OWNERSHIP_CHANGE' && <div className="mt-2"><div className="text-xs font-medium mb-1 text-slate-600">Ownership बदलने का कारण *</div><Input className="h-11" value={nc.change_reason} onChange={(e) => setNc({ ...nc, change_reason: e.target.value })} data-testid="change-reason-input" placeholder="जैसे sale / family transfer" /></div>}
                   </div>
                 )}

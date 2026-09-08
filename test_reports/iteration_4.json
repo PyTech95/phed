@@ -1,0 +1,22 @@
+{
+  "summary": "Verified fix for the misleading '+0 consumers' PHED import display and new sample template download. Backend pytest 6/6 pass (~2s): (1) GET /api/phed/import/sample returns 200 with correct openxmlformats spreadsheet content-type and the exact 10 required headers in row 1; requires admin auth. (2) GET /api/phed/imports returns imports[] and the latest DIDAR entry has result.created_consumers=0 and result.updated_consumers>=3000 (3103 confirmed). (3) GET /api/phed/import/<id> returns the same details. (4) Regression: /api/admin/properties?search=Didar returns total>=1000; /api/phed/consumers/search?q=RAM returns RAM-prefixed items first. Frontend UI (admin login -> THS -> /admin/phed/import): [data-testid=download-sample-btn] triggers a download of PHED_import_sample.xlsx and a 'Sample template downloaded' toast. Import history panel renders the DIDAR rows as GREEN '+0 new, 3103 updated consumers · +0 conn. · 320 conflicts' - i.e. shows updated count, no longer misleading. Bulk phed.xlsx entry shows '+11636 new, 14771 updated consumers · +14790 conn. · 4180 conflicts'. The amber import-nothing-saved-<id> block was not observed on any recent history entry because all recent imports actually persisted data (correct conditional behaviour, verified in code at PhedImport.js line 340-348).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phed_import_history.py",
+    "/app/test_reports/pytest/phed_import_history.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/api/phed/imports has no pagination or limit query param; server hardcoded to .limit(100). If import history grows past 100, older entries will be silently dropped from the UI - consider offset/limit params.",
+    "PhedImport.js is not inspected in full but the conditional rendering (created+updated==0) is correct; ensure the amber block also fires when only conflicts>0 with no valid rows (currently gated only on new+updated==0 which is fine)."
+  ],
+  "updated_files": ["/app/backend/tests/test_phed_import_history.py (new)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / PhedAdmin@2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Import history endpoint returns {imports:[...]} (key is 'imports', not 'items'); it is capped at 100 with no pagination. Sample template endpoint: GET /api/phed/import/sample (admin only) -> xlsx with 10 fixed headers. UI testids: download-sample-btn, import-nothing-saved-<id>. The DIDAR import 'zero created / thousands updated' outcome is the CORRECT behaviour and is now clearly shown in green in the history panel.",
+  "rca of the issue": "User's file 'PHED DIDAR NAGAR.xlsx' contained 3103 consumers that were all already present from an earlier bulk import (phed.xlsx / software data all og.xlsx), so the second import produced created=0, updated=3103, conflicts=320. The old UI only rendered 'created_consumers' as '+0 consumers' - hiding the 3103 updates and making it look like nothing was imported. Fix (verified): backend already returns created/updated/skipped/conflicts in result; frontend PhedImport.js now renders '+N new, M updated consumers · +K conn. · Q conflicts' in green when created+updated>0, and an amber import-nothing-saved-<id> warning only when both are zero. Additionally a Download-sample-file button + GET /api/phed/import/sample endpoint are added."
+}

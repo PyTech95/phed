@@ -300,7 +300,7 @@ export default function EmployeeDashboard() {
 
         {/* Quick Actions */}
         <Button
-          onClick={() => navigate('/employee/phed-survey')}
+          onClick={() => navigate('/employee/property-map')}
           className="w-full h-12 rounded-xl text-white font-semibold flex items-center justify-between px-5 shadow-md shadow-blue-700/20 hover:shadow-lg transition-[box-shadow,transform] hover:-translate-y-px"
           style={{background: 'var(--phed-blue)'}}
           data-testid="start-phed-survey-btn"
@@ -309,12 +309,12 @@ export default function EmployeeDashboard() {
           <ArrowRight className="w-5 h-5" />
         </Button>
         <Button
-          onClick={() => navigate('/employee/property-map')}
+          onClick={() => navigate('/employee/phed-survey')}
           variant="outline"
           className="w-full h-11 rounded-xl font-semibold flex items-center justify-between px-5"
-          data-testid="open-map-btn"
+          data-testid="open-list-btn"
         >
-          <span className="flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" /> Properties Map / List</span>
+          <span className="flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" /> Properties List (search)</span>
           <ArrowRight className="w-5 h-5" />
         </Button>
 

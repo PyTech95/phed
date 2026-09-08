@@ -28,41 +28,27 @@ const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
 
 const CATEGORIES = ['Residential', 'Commercial', 'Institutional', 'Industrial', 'Mixed', 'Other'];
 
-// Big green draggable pin used while placing a NEW property on the map
-const newPropertyPinIcon = L.divIcon({
-  className: 'new-property-pin',
-  html: `<div style="
-    width: 30px; height: 30px; border-radius: 50% 50% 50% 0;
-    background:#16a34a; border:3px solid white; transform: rotate(-45deg);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">
-    <span style="transform: rotate(45deg); color:white; font-weight:800; font-size:16px; line-height:1;">+</span>
-  </div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-  popupAnchor: [0, -30],
-});
-
-// Lets the surveyor tap the map to place / drag a pin for a new property
-function AddPropertyPinLayer({ placing, pinPos, onPick }) {
+// Center-crosshair placement: as the surveyor pans the map, the point under the
+// fixed centre crosshair becomes the new property's location. Tapping recentres there too.
+function CenterPicker({ active, onCenter }) {
+  const map = useMap();
   useMapEvents({
+    moveend() {
+      if (!active) return;
+      const c = map.getCenter();
+      onCenter({ latitude: c.lat, longitude: c.lng });
+    },
     click(e) {
-      if (placing) onPick({ latitude: e.latlng.lat, longitude: e.latlng.lng });
+      if (active) map.setView(e.latlng, map.getZoom());
     },
   });
-  if (!pinPos) return null;
-  return (
-    <Marker
-      position={[pinPos.latitude, pinPos.longitude]}
-      icon={newPropertyPinIcon}
-      draggable={true}
-      eventHandlers={{
-        dragend(e) {
-          const ll = e.target.getLatLng();
-          onPick({ latitude: ll.lat, longitude: ll.lng });
-        },
-      }}
-    />
-  );
+  useEffect(() => {
+    if (active) {
+      const c = map.getCenter();
+      onCenter({ latitude: c.lat, longitude: c.lng });
+    }
+  }, [active, map]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
 
 // Fix for default marker icons
@@ -167,7 +153,12 @@ export default function PropertyMap() {
   const useMyLocationForAdd = () => {
     if (!navigator.geolocation) return toast.error('इस device पर GPS नहीं है');
     navigator.geolocation.getCurrentPosition(
-      (p) => { pickLocation({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }); toast.success('आपकी location ले ली — चाहें तो pin खिसका लें'); },
+      (p) => {
+        const g = { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) };
+        if (mapRef.current) mapRef.current.setView([g.latitude, g.longitude], Math.max(mapRef.current.getZoom(), 18));
+        pickLocation(g);
+        toast.success('आपकी location पर पहुँच गए — बीच के निशान को सही जगह ले जाएँ');
+      },
       () => toast.error('Location नहीं मिली — GPS on करें'),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
@@ -176,11 +167,15 @@ export default function PropertyMap() {
   const openAddProperty = () => {
     setAddForm({ owner_name: '', mobile: '', alternate_mobile: '', ward: '', colony: '', address: '', category: 'Residential' });
     setAddGps(null); setNearbyDupes([]); setShowAdd(false); setPlacing(true);
-    toast.info('📍 Map पर उस जगह tap करें जहाँ property है — या "मेरी location" दबाएँ');
+    toast.info('📍 Map को हिलाकर बीच के हरे निशान को property की जगह पर ले जाएँ — या "मेरी location" दबाएँ');
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (p) => pickLocation({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }),
-        () => { /* no GPS — user will tap the map */ },
+        (p) => {
+          const g = { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) };
+          if (mapRef.current) mapRef.current.setView([g.latitude, g.longitude], Math.max(mapRef.current.getZoom(), 18));
+          pickLocation(g);
+        },
+        () => { /* no GPS — user will move the map under the crosshair */ },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
       );
     }
@@ -189,11 +184,11 @@ export default function PropertyMap() {
   const cancelPlacing = () => { setPlacing(false); setAddGps(null); setNearbyDupes([]); };
 
   const confirmPin = () => {
-    if (!addGps) return toast.error('पहले map पर property की जगह tap करें');
+    if (!addGps) return toast.error('पहले map हिलाकर बीच के निशान से जगह चुनें');
     setPlacing(false); setShowAdd(true);
   };
 
-  const changeLocation = () => { setShowAdd(false); setPlacing(true); toast.info('📍 Map पर सही जगह tap करें या pin खिसकाएँ'); };
+  const changeLocation = () => { setShowAdd(false); setPlacing(true); toast.info('📍 Map हिलाकर बीच के निशान को सही जगह ले जाएँ'); };
 
   const submitAddProperty = async () => {
     toast.dismiss();
@@ -453,7 +448,21 @@ export default function PropertyMap() {
       </div>
 
       {/* Map */}
-      <div className="flex-1" ref={mapContainerRef}>
+      <div className="flex-1 relative" ref={mapContainerRef}>
+        {/* Fixed centre crosshair shown while placing a new property */}
+        {placing && (
+          <div className="pointer-events-none absolute inset-0 z-[1150] flex items-center justify-center" data-testid="center-crosshair">
+            <div style={{ transform: 'translateY(-15px)' }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: '50% 50% 50% 0',
+                background: '#16a34a', border: '3px solid white', transform: 'rotate(-45deg)',
+                boxShadow: '0 3px 10px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ transform: 'rotate(45deg)', color: 'white', fontWeight: 800, fontSize: 18, lineHeight: 1 }}>+</span>
+              </div>
+            </div>
+          </div>
+        )}
         {(
           <MapContainer
             center={getDefaultCenter()}
@@ -471,7 +480,7 @@ export default function PropertyMap() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <FitBounds properties={properties} />
-            <AddPropertyPinLayer placing={placing} pinPos={addGps} onPick={pickLocation} />
+            <CenterPicker active={placing} onCenter={pickLocation} />
             
             {properties.filter(p => p.latitude && p.longitude).map((property, index) => (
               <Marker
@@ -539,7 +548,7 @@ export default function PropertyMap() {
       {placing && (
         <>
           <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1200] bg-slate-900 text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg flex items-center gap-2" data-testid="placing-banner">
-            <MapPin className="w-4 h-4 text-green-400" /> Map पर property की जगह tap करें
+            <MapPin className="w-4 h-4 text-green-400" /> Map हिलाकर बीच के हरे निशान को property पर ले जाएँ
           </div>
           <div className="fixed left-4 right-4 bottom-24 z-[1200] bg-white rounded-2xl shadow-2xl p-3 flex items-center gap-2" data-testid="placing-bar">
             <Button variant="outline" className="h-11" onClick={cancelPlacing} data-testid="placing-cancel-btn">Cancel</Button>

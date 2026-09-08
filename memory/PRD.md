@@ -70,3 +70,12 @@ Browser ──> ingress ──┬── /api/*  ──> FastAPI (uvicorn) 0.0.0.
 - Installed backend requirements.txt; yarn install + `next build` (clean). Backend via supervisor uvicorn :8001; frontend `next start` :3000.
 - Verified: /api/health = {ok, db connected}; admin login (API + UI) OK; Thanesar/THS town seeded; select-town renders. deployment_agent: PASS, no blockers.
 - To publish: use Emergent "Deploy" button.
+
+## Surveyor UX iteration (2026-06) — verified 100% (iteration_5.json)
+- Dashboard: renamed "PHED Water Bill Survey" -> "Water Severage Bill Survey" and moved it ABOVE the Date-wise Progress calendar. Primary CTA "Water Survey Shuru Karo" now opens the Property MAP (/employee/property-map); added small "Properties List (search)" button.
+- Property Map Add Property: added a fixed centre green crosshair (CenterPicker) — panning the map sets the new-property location under the crosshair; tap-to-recentre and "मेरी location" (pan to GPS) also work. Removed old draggable pin.
+- WaterSurveyPanel: relationship (Death transfer) and reason (Ownership change) are now dropdowns with common options + "अन्य (Other)" that reveals a free-text input.
+- Photos: auto-crop (autoCropDocument, gradient bounding-box, conservative fallback) applied on capture to trim hand/background; tap a photo thumbnail to open an in-app preview modal (check clarity), Close returns to same form.
+- Instant submit + background upload: submit() now creates draft -> submits immediately (shows reference no. + done screen fast), then uploads photos in the BACKGROUND (parallel, compressed 2200px/q0.82, 3 retries). Backend upload_attachment now allows uploads while Submitted/Document Pending, blocks only Approved (backend/tests/test_attachment_after_submit.py 3/3 pass).
+- Post-submit navigation goes to the MAP (not the list).
+- Test surveyor: surveyor1 / Survey@2026 (THS) + 3 seeded field properties.

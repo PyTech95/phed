@@ -1123,8 +1123,8 @@ async def upload_attachment(survey_id: str, attachment_type: str = Form(...), fi
         raise HTTPException(404, "Survey not found")
     if survey["surveyor_id"] != user["id"] and not is_admin(user):
         raise HTTPException(403, "Not your survey")
-    if survey["status"] in ("Submitted", "Approved"):
-        raise HTTPException(409, "Survey already submitted")
+    if survey["status"] == "Approved":
+        raise HTTPException(409, "Survey already approved")
     if attachment_type not in ATTACHMENT_TYPES:
         raise HTTPException(400, "Invalid attachment type")
     content = await file.read()

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -26,14 +27,83 @@ async function compressImage(file) {
   if (!file.type.startsWith('image/')) return file; // keep PDFs as-is
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) return file;
-  const MAX = 3200; // HD — keep registry text readable
+  const MAX = 2200; // readable HD but much smaller than raw camera photo → faster upload
   const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
-  if (scale === 1) return file; // already within HD bounds — upload original
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95));
-  return blob ? new File([blob], 'doc.jpg', { type: 'image/jpeg' }) : file;
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+  return blob && blob.size < file.size ? new File([blob], 'doc.jpg', { type: 'image/jpeg' }) : file;
+}
+
+// Fire-and-forget background uploader: compresses + uploads all photos in parallel with retries,
+// so the surveyor can move to the next property immediately after submit.
+async function backgroundUploadDocs(surveyId, files, headers, label) {
+  if (!files || !files.length) return;
+  const uploadOne = async (f) => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const cf = await compressImage(f.file);
+        const fd = new FormData(); fd.append('file', cf); fd.append('attachment_type', f.type);
+        await axios.post(`${PHED}/surveys/${surveyId}/attachments`, fd, { headers });
+        return true;
+      } catch (e) {
+        if (i === 2) return false;
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      }
+    }
+  };
+  const results = await Promise.all(files.map(uploadOne));
+  const failed = results.filter((x) => !x).length;
+  if (failed) toast.error(`${label}: ${failed} photo upload नहीं हुई — property दोबारा खोलकर फिर से डालें`, { duration: 12000 });
+  else toast.success(`${label}: सभी photos upload हो गईं ✓`, { duration: 4000 });
+}
+
+// Best-effort automatic document crop: detects the detailed region (document has
+// text/edges) and trims uniform borders (hand / table / background) around it.
+// Conservative — if unsure, returns the original so the document is never cut off.
+async function autoCropDocument(file) {
+  try {
+    if (!file || !file.type.startsWith('image/')) return file;
+    const bmp = await createImageBitmap(file).catch(() => null);
+    if (!bmp) return file;
+    const W = bmp.width, H = bmp.height;
+    const AW = Math.min(900, W), scale = AW / W, AH = Math.round(H * scale);
+    const c = document.createElement('canvas'); c.width = AW; c.height = AH;
+    const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0, AW, AH);
+    const { data } = ctx.getImageData(0, 0, AW, AH);
+    const gray = new Float32Array(AW * AH);
+    for (let i = 0; i < AW * AH; i++) gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    const rowE = new Float32Array(AH), colE = new Float32Array(AW);
+    for (let y = 1; y < AH - 1; y++) {
+      for (let x = 1; x < AW - 1; x++) {
+        const idx = y * AW + x;
+        const m = Math.abs(gray[idx + 1] - gray[idx - 1]) + Math.abs(gray[idx + AW] - gray[idx - AW]);
+        rowE[y] += m; colE[x] += m;
+      }
+    }
+    const bounds = (arr, len) => {
+      let max = 0; for (let i = 0; i < len; i++) if (arr[i] > max) max = arr[i];
+      if (max <= 0) return [0, len - 1];
+      const thr = max * 0.12;
+      let lo = 0, hi = len - 1;
+      while (lo < len && arr[lo] < thr) lo++;
+      while (hi > 0 && arr[hi] < thr) hi--;
+      return hi <= lo ? [0, len - 1] : [lo, hi];
+    };
+    let [y0, y1] = bounds(rowE, AH), [x0, x1] = bounds(colE, AW);
+    const padX = Math.round(AW * 0.03), padY = Math.round(AH * 0.03);
+    x0 = Math.max(0, x0 - padX); x1 = Math.min(AW - 1, x1 + padX);
+    y0 = Math.max(0, y0 - padY); y1 = Math.min(AH - 1, y1 + padY);
+    const cropW = (x1 - x0 + 1) / AW, cropH = (y1 - y0 + 1) / AH;
+    if (cropW * cropH > 0.9 || cropW < 0.3 || cropH < 0.3) return file; // nothing meaningful to trim, or risky → keep original
+    const fx0 = Math.round(x0 / scale), fy0 = Math.round(y0 / scale);
+    const fw = Math.round((x1 - x0 + 1) / scale), fh = Math.round((y1 - y0 + 1) / scale);
+    const out = document.createElement('canvas'); out.width = fw; out.height = fh;
+    out.getContext('2d').drawImage(bmp, fx0, fy0, fw, fh, 0, 0, fw, fh);
+    const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.9));
+    return blob ? new File([blob], (file.name || 'doc').replace(/\.\w+$/, '') + '_crop.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; }
 }
 
 function distanceM(a, b) {
@@ -65,6 +135,7 @@ function requiredDocs(mode, ownerChange, hasBoth) {
 }
 
 export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
+  const navigate = useNavigate();
   const [survey, setSurvey] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState(null); // yes | denied | no
@@ -89,6 +160,11 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
   const [docs, setDocs] = useState({}); // type -> File (single-file docs)
   const [aadhaar, setAadhaar] = useState({ front: null, back: null }); // two photos
   const [proofPages, setProofPages] = useState([]); // Property proof: multiple pages (File[])
+  const [preview, setPreview] = useState(null); // {url, name} — tap a photo to check clarity
+  const [cropBusy, setCropBusy] = useState(false); // auto-cropping a freshly captured photo
+  const openPreview = (file) => { if (file) setPreview({ url: URL.createObjectURL(file), name: file.name || 'photo' }); };
+  const closePreview = () => { if (preview) { URL.revokeObjectURL(preview.url); setPreview(null); } };
+  const autoCrop = async (file) => { if (!file) return file; setCropBusy(true); try { return await autoCropDocument(file); } finally { setCropBusy(false); } };
   const [gps, setGps] = useState(null);
   const [gpsErr, setGpsErr] = useState(null);
   const watchRef = useRef(null);
@@ -239,21 +315,23 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
         remarks: remarks || null, consumer_refs: picked ? [picked.id] : [], water,
       };
       const { data: s } = await axios.post(`${PHED}/surveys/draft`, body, H());
-      const upload = async (file, type) => {
-        const fd = new FormData(); fd.append('file', await compressImage(file)); fd.append('attachment_type', type);
-        await axios.post(`${PHED}/surveys/${s.id}/attachments`, fd, { headers: { ...H().headers } });
-      };
-      for (const [type, file] of Object.entries(docs)) {
-        if (!file) continue;
-        await upload(file, type);
-      }
-      if (aadhaar.front) await upload(aadhaar.front, 'AADHAAR_FRONT');
-      if (aadhaar.back) await upload(aadhaar.back, 'AADHAAR_BACK');
-      for (const pg of proofPages) await upload(pg, 'PROPERTY_PROOF');
+      // Collect all captured photos/documents to upload
+      const files = [];
+      for (const [type, file] of Object.entries(docs)) { if (file) files.push({ file, type }); }
+      if (aadhaar.front) files.push({ file: aadhaar.front, type: 'AADHAAR_FRONT' });
+      if (aadhaar.back) files.push({ file: aadhaar.back, type: 'AADHAAR_BACK' });
+      for (const pg of proofPages) files.push({ file: pg, type: 'PROPERTY_PROOF' });
+      // Submit immediately (does not depend on the photos being uploaded yet) so the
+      // surveyor gets the reference number at once and can move to the next property.
       const { data: r } = await axios.post(`${PHED}/surveys/${s.id}/submit`, {}, H());
       setDone(r.status || 'Submitted');
       setDoneRef(r.reference_number || null);
       toast.success(docPending ? `Document pending में submit हुआ · ${r.reference_number || ''}` : `Survey submit हो गया · ${r.reference_number || ''}`);
+      // Photos upload in the BACKGROUND (detached from this screen); surveyor can proceed.
+      if (files.length) {
+        toast.info(`${files.length} photo background में upload हो रही हैं — आप अगली property कर सकते हैं`, { duration: 5000 });
+        backgroundUploadDocs(s.id, files, { ...H().headers }, `${property.property_id || 'Property'}`);
+      }
     } catch (e) { toast.error(e.response?.data?.detail || 'Submit failed'); } finally { setSubmitting(false); }
   };
 
@@ -273,8 +351,10 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
         )}
         <div className="mt-3"><Badge variant="outline" data-testid="survey-result-status">{done}</Badge></div>
         <div className="grid gap-2 mt-6">
-          {onNext && <Button className="h-12 text-white" style={{ background: 'var(--phed-blue)' }} onClick={onNext} data-testid="next-pending-btn">अगली property <ChevronRight className="w-4 h-4 ml-1" /></Button>}
-          <Button variant="outline" className="h-11" onClick={onBack} data-testid="survey-done-back">Back to list</Button>
+          <Button className="h-12 text-white" style={{ background: 'var(--phed-blue)' }} onClick={() => navigate('/employee/property-map')} data-testid="next-pending-btn">
+            <MapPin className="w-4 h-4 mr-1.5" /> Map पर वापस जाएँ — अगली property चुनें
+          </Button>
+          <Button variant="outline" className="h-11" onClick={() => navigate('/employee')} data-testid="survey-done-back">Home</Button>
         </div>
       </div>
     </EmployeeLayout>
@@ -296,11 +376,11 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
           <FileText className="w-3.5 h-3.5 inline mr-1 text-slate-400" />{type === 'APPLICATION' ? appLabel : DOC_LABELS[type]} {req ? <span className="text-red-500">*</span> : <span className="text-slate-400">(optional)</span>}
         </div>
         {docs[type] && (docs[type].type?.startsWith('image/')
-          ? <img src={URL.createObjectURL(docs[type])} alt={type} className="mt-1 w-16 h-16 object-cover rounded-md border" style={{ borderColor: 'var(--phed-border)' }} data-testid={`doc-thumb-${type}`} />
+          ? <img src={URL.createObjectURL(docs[type])} alt={type} onClick={() => openPreview(docs[type])} className="mt-1 w-16 h-16 object-cover rounded-md border cursor-pointer" style={{ borderColor: 'var(--phed-border)' }} data-testid={`doc-thumb-${type}`} />
           : <div className="text-[11px] text-green-600 truncate">📄 {docs[type].name}</div>)}
         {!docs[type] && already && <div className="text-[11px] text-green-600 truncate">✓ पहले upload हो चुका — बदलने के लिए camera दबाएँ</div>}
       </div>
-      <input ref={(el) => (fileRefs.current[type] = el)} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => setDoc(type, e.target.files[0])} data-testid={`doc-input-${type}`} />
+      <input ref={(el) => (fileRefs.current[type] = el)} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={async (e) => { const f = e.target.files[0]; setDoc(type, f ? await autoCrop(f) : null); }} data-testid={`doc-input-${type}`} />
       <div className="flex items-center gap-1 shrink-0">
         <Button variant="outline" size="sm" className="h-9" onClick={() => fileRefs.current[type]?.click()} data-testid={`doc-btn-${type}`}><Camera className="w-4 h-4" /></Button>
         {docs[type] && <button type="button" className="text-red-500" onClick={() => setDoc(type, null)}><X className="w-4 h-4" /></button>}
@@ -315,7 +395,7 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
     const Side = (side, label, oldHas) => (
       <div className="flex-1 rounded-lg border p-2.5" style={{ borderColor: (aadhaar[side] || oldHas) ? '#16a34a' : 'var(--phed-border)' }}>
         <div className="text-[11px] font-medium mb-1" style={{ color: 'var(--phed-ink)' }}>{label}</div>
-        <input ref={(el) => (fileRefs.current[`AADHAAR_${side}`] = el)} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => setAadhaar((a) => ({ ...a, [side]: e.target.files[0] || null }))} data-testid={`aadhaar-${side}-input`} />
+        <input ref={(el) => (fileRefs.current[`AADHAAR_${side}`] = el)} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={async (e) => { const f = e.target.files[0]; const cf = f ? await autoCrop(f) : null; setAadhaar((a) => ({ ...a, [side]: cf })); }} data-testid={`aadhaar-${side}-input`} />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-9 flex-1" onClick={() => fileRefs.current[`AADHAAR_${side}`]?.click()} data-testid={`aadhaar-${side}-btn`}><Camera className="w-4 h-4 mr-1" /> Photo</Button>
           {aadhaar[side] && <button type="button" className="text-red-500" onClick={() => setAadhaar((a) => ({ ...a, [side]: null }))}><X className="w-4 h-4" /></button>}
@@ -323,7 +403,7 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
         {aadhaar[side] && (
           <div className="mt-1.5">
             {aadhaar[side].type?.startsWith('image/')
-              ? <img src={URL.createObjectURL(aadhaar[side])} alt={label} className="w-full h-24 object-cover rounded-md border" style={{ borderColor: 'var(--phed-border)' }} data-testid={`aadhaar-${side}-thumb`} />
+              ? <img src={URL.createObjectURL(aadhaar[side])} alt={label} onClick={() => openPreview(aadhaar[side])} className="w-full h-24 object-cover rounded-md border cursor-pointer" style={{ borderColor: 'var(--phed-border)' }} data-testid={`aadhaar-${side}-thumb`} />
               : <div className="text-[10px] text-green-600 truncate">📄 {aadhaar[side].name}</div>}
           </div>
         )}
@@ -351,14 +431,14 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
           <span className="text-[10px] text-slate-400">{proofPages.length} नया{oldCount ? ` · ${oldCount} पुराना` : ''}</span>
         </div>
         <div className="text-[11px] text-slate-500 mt-0.5">रजिस्ट्री के सारे page (5-7) एक-एक करके add करें — download में एक ही PDF बनेगा।</div>
-        <input ref={(el) => (fileRefs.current.PROPERTY_PROOF = el)} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple className="hidden" onChange={(e) => { setProofPages((p) => [...p, ...Array.from(e.target.files)]); e.target.value = ''; }} data-testid="proof-add-input" />
+        <input ref={(el) => (fileRefs.current.PROPERTY_PROOF = el)} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple className="hidden" onChange={async (e) => { const fs = Array.from(e.target.files); e.target.value = ''; const cropped = await Promise.all(fs.map((f) => autoCrop(f))); setProofPages((p) => [...p, ...cropped]); }} data-testid="proof-add-input" />
         {proofPages.length > 0 && (
           <div className="mt-2 space-y-1">
             {proofPages.map((f, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] rounded bg-slate-50 px-2 py-1" data-testid={`proof-page-${i}`}>
                 <span className="flex items-center gap-1.5 truncate text-green-700">
                   {f.type?.startsWith('image/')
-                    ? <img src={URL.createObjectURL(f)} alt={`page ${i + 1}`} className="w-8 h-8 object-cover rounded border" style={{ borderColor: 'var(--phed-border)' }} data-testid={`proof-thumb-${i}`} />
+                    ? <img src={URL.createObjectURL(f)} alt={`page ${i + 1}`} onClick={() => openPreview(f)} className="w-8 h-8 object-cover rounded border cursor-pointer" style={{ borderColor: 'var(--phed-border)' }} data-testid={`proof-thumb-${i}`} />
                     : <span>📄</span>}
                   <span className="truncate">Page {i + 1} — {f.name}</span>
                 </span>
@@ -619,6 +699,31 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
             </Button>
           </div>
         </div>
+
+        {/* Auto-crop working overlay */}
+        {cropBusy && (
+          <div className="fixed inset-0 z-[1250] bg-black/40 flex items-center justify-center" data-testid="crop-busy">
+            <div className="bg-white rounded-xl px-5 py-3 flex items-center gap-2 text-sm text-slate-700 shadow-lg">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> Photo auto-crop हो रही है…
+            </div>
+          </div>
+        )}
+
+        {/* Tap-to-check photo preview — Close returns to the same form (no navigation) */}
+        {preview && (
+          <div className="fixed inset-0 z-[1300] bg-black/90 flex flex-col" onClick={closePreview} data-testid="photo-preview-modal">
+            <div className="flex items-center justify-between px-4 h-14 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
+              <span className="text-sm truncate">Photo साफ है या नहीं — check करें</span>
+              <button type="button" onClick={closePreview} className="p-2" data-testid="photo-preview-close"><X className="w-6 h-6" /></button>
+            </div>
+            <div className="flex-1 flex items-center justify-center p-3 overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <img src={preview.url} alt={preview.name} className="max-w-full max-h-full rounded-lg" data-testid="photo-preview-img" />
+            </div>
+            <div className="p-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <Button className="w-full h-11 text-white" style={{ background: 'var(--phed-blue)' }} onClick={closePreview} data-testid="photo-preview-ok">ठीक है — वापस जाएँ</Button>
+            </div>
+          </div>
+        )}
       </div>
     </EmployeeLayout>
   );

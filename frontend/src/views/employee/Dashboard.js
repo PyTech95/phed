@@ -181,6 +181,46 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
+        {/* Water Severage Bill Survey progress (separate from property survey) */}
+        {phed && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Droplet className="w-4 h-4" style={{ color: 'var(--phed-blue, #1565C0)' }} />
+              <span className="text-sm font-semibold" style={{ color: 'var(--phed-ink, #0f172a)' }}>Water Severage Bill Survey</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Total Properties', phed.total_properties, '#1565C0'],
+                ['PHED Pending', phed.phed_pending, '#F57C00'],
+                ['Submitted', phed.total_submitted, '#2E7D32'],
+                ['New Properties Added', phed.field_properties, '#7C3AED'],
+              ].map(([label, val, color]) => (
+                <div key={label} className="rounded-xl bg-white border p-3" style={{ borderColor: '#e2e8f0' }} data-testid={`phed-stat-${String(label).replace(/\s+/g,'-').toLowerCase()}`}>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+                  <div className="text-2xl font-extrabold" style={{ color }}>{val ?? 0}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Connection outcome breakdown (submitted surveys) */}
+            <p className="text-[11px] font-medium uppercase tracking-wide mt-3 mb-2" style={{color: 'var(--phed-muted)'}}>Submitted surveys — breakdown</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Already Connection', phed.already_connection, '#0369A1'],
+                ['Sewer Connection', phed.sewer_connection, '#00897B'],
+                ['New Connection', phed.new_connection, '#B45309'],
+                ['Ownership Change', phed.ownership_change, '#7C3AED'],
+                ['Death Transfer', phed.death_transfer, '#B91C1C'],
+              ].map(([label, val, color]) => (
+                <div key={label} className="rounded-xl bg-white border p-3" style={{ borderColor: '#e2e8f0' }} data-testid={`phed-breakdown-${String(label).replace(/\s+/g,'-').toLowerCase()}`}>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+                  <div className="text-2xl font-extrabold" style={{ color }}>{val ?? 0}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Date-wise Progress */}
         <div className="clinic-card overflow-hidden">
           <div className="px-4 pt-4 pb-2 flex items-center justify-between">
@@ -257,46 +297,6 @@ export default function EmployeeDashboard() {
             </div>
           )}
         </div>
-
-        {/* PHED Water Bill Survey progress (separate from property survey) */}
-        {phed && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Droplet className="w-4 h-4" style={{ color: 'var(--phed-blue, #1565C0)' }} />
-              <span className="text-sm font-semibold" style={{ color: 'var(--phed-ink, #0f172a)' }}>PHED Water Bill Survey</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                ['Total Properties', phed.total_properties, '#1565C0'],
-                ['PHED Pending', phed.phed_pending, '#F57C00'],
-                ['Submitted', phed.total_submitted, '#2E7D32'],
-                ['New Properties Added', phed.field_properties, '#7C3AED'],
-              ].map(([label, val, color]) => (
-                <div key={label} className="rounded-xl bg-white border p-3" style={{ borderColor: '#e2e8f0' }} data-testid={`phed-stat-${String(label).replace(/\s+/g,'-').toLowerCase()}`}>
-                  <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-                  <div className="text-2xl font-extrabold" style={{ color }}>{val ?? 0}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Connection outcome breakdown (submitted surveys) */}
-            <p className="text-[11px] font-medium uppercase tracking-wide mt-3 mb-2" style={{color: 'var(--phed-muted)'}}>Submitted surveys — breakdown</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                ['Already Connection', phed.already_connection, '#0369A1'],
-                ['Sewer Connection', phed.sewer_connection, '#00897B'],
-                ['New Connection', phed.new_connection, '#B45309'],
-                ['Ownership Change', phed.ownership_change, '#7C3AED'],
-                ['Death Transfer', phed.death_transfer, '#B91C1C'],
-              ].map(([label, val, color]) => (
-                <div key={label} className="rounded-xl bg-white border p-3" style={{ borderColor: '#e2e8f0' }} data-testid={`phed-breakdown-${String(label).replace(/\s+/g,'-').toLowerCase()}`}>
-                  <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-                  <div className="text-2xl font-extrabold" style={{ color }}>{val ?? 0}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Quick Actions */}
         <Button

@@ -81,6 +81,9 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
   // Common relationships for Death transfer (मृतक owner से रिश्ता); last option = Other (type free text)
   const REL_OPTIONS = ['बेटा (Son)', 'बेटी (Daughter)', 'पत्नी (Wife)', 'पति (Husband)', 'पिता (Father)', 'माता (Mother)', 'भाई (Brother)', 'बहन (Sister)', 'पोता (Grandson)', 'पोती (Granddaughter)', 'बहू (Daughter-in-law)', 'दामाद (Son-in-law)'];
   const [relOther, setRelOther] = useState(false);
+  // Ownership-change reasons; 3rd option = Other (type free text)
+  const REASON_OPTIONS = ['Sale (बिक्री)', 'Family transfer (पारिवारिक हस्तांतरण)'];
+  const [reasonOther, setReasonOther] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [deniedReason, setDeniedReason] = useState(null); // 'SELF' | 'TENANT' | 'OTHER'
   const [docs, setDocs] = useState({}); // type -> File (single-file docs)
@@ -532,7 +535,27 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
                         )}
                       </div>
                     )}
-                    {ownerChange === 'OWNERSHIP_CHANGE' && <div className="mt-2"><div className="text-xs font-medium mb-1 text-slate-600">Ownership बदलने का कारण *</div><Input className="h-11" value={nc.change_reason} onChange={(e) => setNc({ ...nc, change_reason: e.target.value })} data-testid="change-reason-input" placeholder="जैसे sale / family transfer" /></div>}
+                    {ownerChange === 'OWNERSHIP_CHANGE' && (
+                      <div className="mt-2">
+                        <div className="text-xs font-medium mb-1 text-slate-600">Ownership बदलने का कारण *</div>
+                        <select
+                          className="w-full h-11 border rounded-lg px-3 bg-white"
+                          value={reasonOther ? '__OTHER__' : (REASON_OPTIONS.includes(nc.change_reason) ? nc.change_reason : (nc.change_reason ? '__OTHER__' : ''))}
+                          onChange={(e) => {
+                            if (e.target.value === '__OTHER__') { setReasonOther(true); setNc({ ...nc, change_reason: REASON_OPTIONS.includes(nc.change_reason) ? '' : nc.change_reason }); }
+                            else { setReasonOther(false); setNc({ ...nc, change_reason: e.target.value }); }
+                          }}
+                          data-testid="change-reason-select"
+                        >
+                          <option value="">कारण चुनें…</option>
+                          {REASON_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                          <option value="__OTHER__">अन्य (Other) — खुद लिखें</option>
+                        </select>
+                        {(reasonOther || (nc.change_reason && !REASON_OPTIONS.includes(nc.change_reason))) && (
+                          <Input className="h-11 mt-2" value={nc.change_reason} onChange={(e) => setNc({ ...nc, change_reason: e.target.value })} data-testid="change-reason-input" placeholder="कारण लिखें (जैसे gift / court order / अन्य)" />
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

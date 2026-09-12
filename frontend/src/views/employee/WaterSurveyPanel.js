@@ -373,6 +373,9 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
       const { data: r } = await axios.post(`${PHED}/surveys/${s.id}/submit`, {}, H());
       // Bust the surveyor map cache so the pin colour (red→yellow) updates on return.
       try { localStorage.removeItem('surveyor_properties_cache'); localStorage.removeItem('surveyor_properties_cache_time'); } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent('phed-survey-saved', {
+        detail: { propertyId: property.id, surveyId: s.id, status: r.status || 'Submitted' },
+      }));
       setDone(r.status || 'Submitted');
       setDoneRef(r.reference_number || null);
       toast.success(docPending ? `Document pending में submit हुआ · ${r.reference_number || ''}` : `Survey submit हो गया · ${r.reference_number || ''}`);

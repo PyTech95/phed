@@ -1950,59 +1950,74 @@ def _survey_filter(ward_id, colony, surveyor_id, status, date_from, date_to):
 
 @phed_router.get("/my-progress")
 async def my_phed_progress(user: dict = Depends(get_current_user)):
+    """PHED progress for the current surveyor's assigned property scope.
+
+    Counts are derived from the same property PHED state returned to the surveyor map,
+    rather than from only surveys created by the current user. This keeps reassigned and
+    office-processed properties from appearing pending on the dashboard.
+    """
     db = get_db()
     uid = user["id"]
     assigned_q = {"$or": [{"assigned_employee_id": uid}, {"assigned_employee_ids": uid}]}
     total_props = await db.properties.count_documents(assigned_q)
-    surveyed_prop_ids = set()
-    completed = in_progress = no_conn = new_unlisted = 0
-    total_submitted = already_connection = sewer_connection = new_connection = ownership_change = death_transfer = 0
-    async for s in db.phed_surveys.find(
-        {"surveyor_id": uid},
-        {"_id": 0, "property_record_id": 1, "status": 1, "survey_type": 1, "water": 1},
-    ):
-        surveyed_prop_ids.add(s.get("property_record_id"))
-        st = s.get("status")
-        if st in OPEN_STATUSES or st in ("Completed", "No Connection"):
-            completed += 1
-            if s.get("survey_type") == "NO_CONNECTION" or st == "No Connection":
-                no_conn += 1
-            if s.get("survey_type") == "NEW_UNLISTED":
-                new_unlisted += 1
-        elif st in ("In Progress", "Draft"):
-            in_progress += 1
-        # Outcome breakdown over everything the surveyor has actually submitted (not drafts)
-        if st and st != "Draft":
-            total_submitted += 1
-            w = s.get("water") or {}
-            if w.get("has_connection"):
-                already_connection += 1
-            if w.get("has_sewer") or (w.get("sewer_connection_numbers") or []):
-                sewer_connection += 1
-            if w.get("new_connection") or s.get("survey_type") == "NO_CONNECTION":
-                new_connection += 1
-            oc = w.get("owner_change")
-            if oc == "OWNERSHIP_CHANGE":
-                ownership_change += 1
-            elif oc == "DEATH_TRANSFER":
-                death_transfer += 1
-    done_props = len([p for p in surveyed_prop_ids if p])
-    pending = max(total_props - done_props, 0)
+    completed_states = ["Submitted", "Requires Review", "Document Pending", "Approved"]
+    done_filter = {
+        "$or": [
+            {"phed_survey_state": {"$in": completed_states}},
+            {
+                "phed_survey_state": {"$exists": False},
+                "phed_survey_status": {"$in": completed_states + ["No PHED Connection"]},
+            },
+        ]
+    }
+    in_progress_filter = {
+        "$or": [
+            {"phed_survey_state": "Draft"},
+            {"phed_survey_state": {"$exists": False}, "phed_survey_status": "Draft"},
+        ]
+    }
+    done_props = await db.properties.count_documents({"$and": [assigned_q, done_filter]})
+    in_progress = await db.properties.count_documents({"$and": [assigned_q, in_progress_filter]})
+    no_conn = await db.properties.count_documents(
+        {
+            "$and": [
+                assigned_q,
+                {"phed_survey_status": "No PHED Connection"},
+            ]
+        }
+    )
+    outcome_rows = await db.properties.aggregate(
+        [
+            {"$match": {"$and": [assigned_q, {"phed_outcome": {"$ne": None}}]}},
+            {"$group": {"_id": "$phed_outcome", "count": {"$sum": 1}}},
+        ]
+    ).to_list(None)
+    outcomes = {row["_id"]: row["count"] for row in outcome_rows}
+    survey_rows = await db.phed_surveys.find(
+        {"surveyor_id": uid, "status": {"$ne": "Draft"}},
+        {"_id": 0, "water": 1},
+    ).to_list(None)
+    sewer_connection = sum(
+        1
+        for survey in survey_rows
+        if (survey.get("water") or {}).get("has_sewer")
+        or (survey.get("water") or {}).get("sewer_connection_numbers")
+    )
     field_properties = await db.properties.count_documents({"source": "field", "created_by": uid})
     return {
         "assigned_area": user.get("assigned_area"),
         "total_properties": total_props,
-        "phed_pending": pending,
+        "phed_pending": max(total_props - done_props - in_progress, 0),
         "phed_in_progress": in_progress,
-        "phed_completed": completed,
+        "phed_completed": done_props,
         "no_connection": no_conn,
-        "new_unlisted": new_unlisted,
-        "total_submitted": total_submitted,
-        "already_connection": already_connection,
+        "new_unlisted": outcomes.get("NEW", 0),
+        "total_submitted": done_props,
+        "already_connection": outcomes.get("HAS_CONNECTION", 0),
         "sewer_connection": sewer_connection,
-        "new_connection": new_connection,
-        "ownership_change": ownership_change,
-        "death_transfer": death_transfer,
+        "new_connection": outcomes.get("NEW", 0),
+        "ownership_change": 0,
+        "death_transfer": 0,
         "field_properties": field_properties,
     }
 

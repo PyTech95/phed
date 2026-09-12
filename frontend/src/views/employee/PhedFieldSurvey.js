@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import EmployeeLayout from '../../components/EmployeeLayout';
 import { Card, CardContent } from '../../components/ui/card';
@@ -49,15 +49,22 @@ export default function PhedFieldSurvey() {
   const { user, getAuthHeader } = useAuth();
   const { propertyId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const H = () => ({ headers: getAuthHeader() });
   const isAdmin = ['ADMIN', 'SUPERVISOR', 'MC_OFFICER'].includes(user?.role);
   const [props, setProps] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [routeError, setRouteError] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null);
   const [pendingOnly, setPendingOnly] = useState(true);
   const [me, setMe] = useState(null);
   const [phedIds, setPhedIds] = useState(new Set()); // property ids matched via PHED (consumer/connection) search
   const [phedSearching, setPhedSearching] = useState(false);
+  const [phedSearchError, setPhedSearchError] = useState('');
+  const searchInputRef = useRef(null);
+  const propertyListRef = useRef(null);
+  const missingRouteHandledRef = useRef(false);
 
   useEffect(() => {
     if (isAdmin || !navigator.geolocation) return;
@@ -66,13 +73,18 @@ export default function PhedFieldSurvey() {
 
   const loadProps = useCallback(async () => {
     setProps(null);
+    setLoadError('');
     try {
       const url = isAdmin ? `${API_URL}/admin/properties?page=1&limit=5000` : `${API_URL}/employee/properties?limit=5000`;
       const { data } = await axios.get(url, H());
       const list = data.properties || data || [];
       setProps(list);
       return list;
-    } catch { setProps([]); return []; }
+    } catch {
+      setLoadError('Properties load नहीं हुईं। Refresh करके फिर कोशिश करें।');
+      setProps([]);
+      return [];
+    }
   }, [isAdmin]);
 
   useEffect(() => { loadProps(); }, [loadProps]);
@@ -81,12 +93,23 @@ export default function PhedFieldSurvey() {
   // phone or name and surface the linked property. (Property tab keeps property-field search.)
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 2) { setPhedIds(new Set()); setPhedSearching(false); return; }
+    if (term.length < 2) {
+      setPhedIds(new Set());
+      setPhedSearchError('');
+      setPhedSearching(false);
+      return undefined;
+    }
     let cancelled = false;
+    const controller = new AbortController();
     setPhedSearching(true);
+    setPhedSearchError('');
     const t = setTimeout(async () => {
       try {
-        const { data } = await axios.get(`${PHED}/consumers/search`, { ...H(), params: { q: term, limit: 25 } });
+        const { data } = await axios.get(`${PHED}/consumers/search`, {
+          ...H(),
+          params: { q: term, limit: 25 },
+          signal: controller.signal,
+        });
         if (cancelled) return;
         const ids = new Set();
         (data.results || []).forEach((c) => {
@@ -94,28 +117,48 @@ export default function PhedFieldSurvey() {
           if (pid) ids.add(pid);
         });
         setPhedIds(ids);
-      } catch { if (!cancelled) setPhedIds(new Set()); }
+      } catch (error) {
+        if (!cancelled && error.code !== 'ERR_CANCELED') {
+          setPhedIds(new Set());
+          setPhedSearchError('PHED search अभी उपलब्ध नहीं है; property details से search जारी रखें।');
+        }
+      }
       finally { if (!cancelled) setPhedSearching(false); }
     }, 350);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(t);
+    };
   }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-open a property when navigated from the map (URL param)
   useEffect(() => {
-    if (propertyId && props && !selected) {
+    if (propertyId && props && !selected && !missingRouteHandledRef.current) {
       const p = props.find((x) => x.id === propertyId);
-      if (p) setSelected(p);
+      if (p) {
+        setSelected(p);
+      } else {
+        missingRouteHandledRef.current = true;
+        setRouteError('Selected property अब आपके assigned list में नहीं है। Map से दूसरी property चुनें।');
+      }
     }
   }, [propertyId, props, selected]);
 
-  const isSurveyed = (p) => ['Submitted', 'Requires Review', 'Approved', 'No PHED Connection'].includes(p.phed_survey_status);
+  const isSurveyed = (p) => [
+    'Draft',
+    'Submitted',
+    'Requires Review',
+    'Document Pending',
+    'Approved',
+    'No PHED Connection',
+  ].includes(p.phed_survey_status);
   const distTo = (p) => (me && p.latitude != null ? Math.hypot((p.latitude - me.latitude) * 111320, (p.longitude - me.longitude) * 111320 * Math.cos((me.latitude * Math.PI) / 180)) : null);
   const filtered = (props || []).filter((p) => {
     const s = q.trim().toLowerCase();
     if (s) {
-      // While searching, show every match (property fields OR PHED consumer/connection) regardless of the pending filter
       const textMatch = [p.property_id, p.owner_name, p.address, p.colony, p.mobile].some((v) => (v || '').toLowerCase().includes(s));
-      return textMatch || phedIds.has(p.id);
+      if (!textMatch && !phedIds.has(p.id)) return false;
     }
     if (!isAdmin && pendingOnly && isSurveyed(p)) return false;
     return true;
@@ -129,8 +172,41 @@ export default function PhedFieldSurvey() {
     if (!n) toast.success('सभी properties का survey पूरा हो गया!');
   };
 
-  if (selected && !isAdmin) return <WaterSurveyPanel key={selected.id} property={selected} H={H} onBack={() => { setSelected(null); if (propertyId) navigate('/employee/phed-survey'); loadProps(); }} onNext={() => { loadProps().then((list) => nextPending(list)); }} />;
-  if (selected) return <SurveyPanel property={selected} onBack={() => { setSelected(null); if (propertyId) navigate('/employee/phed-survey'); loadProps(); }} H={H} isAdmin={isAdmin} />;
+  const chooseProperty = (property) => {
+    searchInputRef.current?.blur();
+    setSelected(property);
+  };
+
+  const beginPendingSelection = () => {
+    setPendingOnly(true);
+    toast.info('नीचे सूची से Pending property चुनें।');
+    propertyListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const returnToSource = () => {
+    setSelected(null);
+    loadProps();
+    if (!propertyId) return;
+    navigate(location.state?.returnTo || '/employee/phed-survey', {
+      replace: true,
+      state: { restoreSearchQuery: location.state?.restoreSearchQuery || '' },
+    });
+  };
+
+  if (selected && !isAdmin) {
+    return (
+      <WaterSurveyPanel
+        key={selected.id}
+        property={selected}
+        H={H}
+        onBack={returnToSource}
+        onNext={() => loadProps().then((list) => nextPending(list))}
+      />
+    );
+  }
+  if (selected) {
+    return <SurveyPanel property={selected} onBack={returnToSource} H={H} isAdmin={isAdmin} />;
+  }
 
   return (
     <EmployeeLayout title={isAdmin ? 'PHED Consumer Survey' : 'Water Supply Survey'}>
@@ -141,14 +217,50 @@ export default function PhedFieldSurvey() {
               <div className="text-2xl font-bold leading-none" data-testid="pending-count">{pendingCount}</div>
               <div className="text-xs opacity-90">बाकी (pending) · {props.length - pendingCount} / {props.length} done</div>
             </div>
-            {pendingCount > 0 && <Button className="bg-white hover:bg-blue-50 h-11" style={{ color: 'var(--phed-blue)' }} onClick={nextPending} data-testid="start-next-btn">Survey शुरू करें <ChevronRight className="w-4 h-4 ml-1" /></Button>}
+            {pendingCount > 0 && (
+              <Button
+                className="h-11 bg-white hover:bg-blue-50"
+                style={{ color: 'var(--phed-blue)' }}
+                onClick={beginPendingSelection}
+                data-testid="start-next-btn"
+              >
+                Pending चुनें <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
           </div>
+        )}
+        {routeError && (
+          <Card className="mb-3 border-amber-300 bg-amber-50" data-testid="selected-property-route-error">
+            <CardContent className="p-3 text-sm text-amber-800">{routeError}</CardContent>
+          </Card>
         )}
         <div className="relative mb-2">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-          <Input className="pl-9 h-11" placeholder="Search Consumer ID, connection no., phone, name…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="field-property-search" />
+          <Input
+            ref={searchInputRef}
+            className="h-11 pl-9 pr-9"
+            placeholder="Search Consumer ID, connection no., phone, name…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            data-testid="field-property-search"
+          />
           {phedSearching && <Loader2 className="w-4 h-4 absolute right-3 top-3 text-blue-400 animate-spin" />}
+          {!phedSearching && q && (
+            <button
+              type="button"
+              onClick={() => { setQ(''); searchInputRef.current?.focus(); }}
+              className="absolute right-2 top-1.5 rounded p-1.5 text-slate-400 hover:bg-slate-100"
+              data-testid="clear-field-property-search"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
+        {phedSearchError && (
+          <p className="mb-2 text-xs text-amber-700" data-testid="phed-search-error">{phedSearchError}</p>
+        )}
+        {loadError && <p className="mb-2 text-sm text-red-700" data-testid="field-properties-load-error">{loadError}</p>}
         {!isAdmin && (
           <div className="flex gap-2 mb-4 text-xs">
             <button type="button" onClick={() => setPendingOnly(true)} className={`px-3 h-8 rounded-full border ${pendingOnly ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-600'}`} data-testid="filter-pending">Pending</button>
@@ -158,13 +270,27 @@ export default function PhedFieldSurvey() {
         )}
         {props === null && <div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>}
         {props && filtered.length === 0 && (
-          <Card className="clinic-card"><CardContent className="py-12 text-center text-slate-500">
-            No assigned properties found. Ask an administrator to assign properties / upload property data.
-          </CardContent></Card>
+          <Card className="clinic-card" data-testid="field-property-empty-state">
+            <CardContent className="py-12 text-center text-slate-500">
+              {q
+                ? `No matching properties found for "${q}".`
+                : 'No assigned properties found. Ask an administrator to assign properties / upload property data.'}
+            </CardContent>
+          </Card>
         )}
-        <div className="space-y-2.5">
+        <div className="space-y-2.5" ref={propertyListRef}>
           {filtered.slice(0, 300).map((p) => (
-            <Card key={p.id} className="clinic-card cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelected(p)} data-testid={`field-property-${p.id}`}>
+            <Card
+              key={p.id}
+              className="clinic-card cursor-pointer transition-shadow hover:shadow-md"
+              onClick={() => chooseProperty(p)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') chooseProperty(p);
+              }}
+              role="button"
+              tabIndex="0"
+              data-testid={`field-property-${p.id}`}
+            >
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="min-w-0">
                   <div className="font-semibold truncate" style={{ color: 'var(--phed-ink)' }}>{p.owner_name || 'Unknown owner'}</div>

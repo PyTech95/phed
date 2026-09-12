@@ -28,10 +28,24 @@ export default function EmployeeDashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
-    fetchProgress();
-    fetchPhed();
+    const refreshSummaries = () => {
+      fetchProgress();
+      fetchPhed();
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshSummaries();
+    };
+    refreshSummaries();
     checkTodayAttendance();
-  }, []);
+    window.addEventListener('phed-survey-saved', refreshSummaries);
+    window.addEventListener('focus', refreshSummaries);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('phed-survey-saved', refreshSummaries);
+      window.removeEventListener('focus', refreshSummaries);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchDailyProgress();
@@ -188,12 +202,15 @@ export default function EmployeeDashboard() {
               <Droplet className="w-4 h-4" style={{ color: 'var(--phed-blue, #1565C0)' }} />
               <span className="text-sm font-semibold" style={{ color: 'var(--phed-ink, #0f172a)' }}>Water Severage Bill Survey</span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <p className="mb-2 text-xs" style={{ color: 'var(--phed-muted)' }} data-testid="phed-scope-label">
+              My assigned properties · all-time PHED survey status
+            </p>
+            <div className="grid grid-cols-2 gap-3" data-testid="phed-progress-summary">
               {[
                 ['Total Properties', phed.total_properties, '#1565C0'],
                 ['PHED Pending', phed.phed_pending, '#F57C00'],
-                ['Submitted', phed.total_submitted, '#2E7D32'],
-                ['New Properties Added', phed.field_properties, '#7C3AED'],
+                ['Surveyed / Done', phed.phed_completed, '#2E7D32'],
+                ['In Progress', phed.phed_in_progress, '#B45309'],
               ].map(([label, val, color]) => (
                 <div key={label} className="rounded-xl bg-white border p-3" style={{ borderColor: '#e2e8f0' }} data-testid={`phed-stat-${String(label).replace(/\s+/g,'-').toLowerCase()}`}>
                   <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
@@ -203,10 +220,12 @@ export default function EmployeeDashboard() {
             </div>
 
             {/* Connection outcome breakdown (submitted surveys) */}
-            <p className="text-[11px] font-medium uppercase tracking-wide mt-3 mb-2" style={{color: 'var(--phed-muted)'}}>Submitted surveys — breakdown</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide mt-3 mb-2" style={{color: 'var(--phed-muted)'}}>
+              Assigned properties — verified outcomes
+            </p>
             <div className="grid grid-cols-2 gap-3">
               {[
-                ['Already Connection', phed.already_connection, '#0369A1'],
+                ['Already Verified', phed.already_connection, '#0369A1'],
                 ['Sewer Connection', phed.sewer_connection, '#00897B'],
                 ['New Connection', phed.new_connection, '#B45309'],
                 ['Ownership Change', phed.ownership_change, '#7C3AED'],
@@ -300,7 +319,7 @@ export default function EmployeeDashboard() {
 
         {/* Quick Actions */}
         <Button
-          onClick={() => navigate('/employee/property-map')}
+          onClick={() => navigate('/employee/properties')}
           className="w-full h-12 rounded-xl text-white font-semibold flex items-center justify-between px-5 shadow-md shadow-blue-700/20 hover:shadow-lg transition-[box-shadow,transform] hover:-translate-y-px"
           style={{background: 'var(--phed-blue)'}}
           data-testid="start-phed-survey-btn"

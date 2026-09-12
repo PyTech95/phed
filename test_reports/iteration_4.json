@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 4 regression verification of the PhedFieldSurvey filtered() fix. The former early return that let searched rows bypass pendingOnly has been removed (line 163 now unconditionally applies '!isAdmin && pendingOnly && isSurveyed(p) => false'). Verified end-to-end. Frontend (Playwright, surveyor1 @ THS, mobile 390 & 360): (1) /employee/phed-survey with filter-pending + NO query -> THS-0001 not listed, field-property-empty-state visible; (2) filter-pending + search 'THS-0001' -> THS-0001 STILL NOT listed and field-property-empty-state visible (fix works); (3) filter-all + search 'THS-0001' -> exactly one row field-property-6abd2d41-a7fc-479d-992a-3a72558b30aa visible with 'Submitted' badge; (4) /employee/properties map-bottom-info-bar shows 'Total: 3 properties / Pending 0 / Submitted / review 2 / Approved 1' (THS-0001 not counted as pending); (5) at 360px, document.scrollWidth-clientWidth = 0 on BOTH /employee/phed-survey and /employee/properties (no horizontal overflow). Backend (pytest 5/5 PASS via existing /app/backend/tests/test_phed_iter3_post_submit.py against external URL): /api/phed/my-progress -> total=3, pending=0, in_progress=0, completed=3; /api/map/employee-properties -> THS-0001 phed_survey_status=Submitted / state=Submitted / outcome=LOCKED; admin /api/phed/surveys?property_id=THS-0001 -> exactly one non-rejected survey with reference_number=PL0001, reference_code=PL, status=Submitted, property_record_id=6abd2d41-a7fc-479d-992a-3a72558b30aa; auth guard rejects unauthenticated calls. No data modifications performed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phed_iter3_post_submit.py",
+    "/app/test_reports/pytest/iter4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix at PhedFieldSurvey.js:157-165 is correct and minimal: dropped the early-return; pendingOnly gate now applied even when a search string is present (for non-admins). This satisfies the QA request without impacting admin behavior.",
+    "phed.py (>2300 lines) and server.py remain large — recommend splitting into domain modules in a follow-up (non-blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all 6 review checks green)"},
+  "test_credentials": "surveyor1 / Survey@2026 (Thanesar/THS); admin / Phed#Admin2026! (read-only, used by pytest fixtures)",
+  "seed_data_creation": "None. Read-only verification. THS-0001 record and its single PL0001 survey unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "PhedFieldSurvey.filtered() fix is verified. Expected state for surveyor1: total=3, pending=0, in_progress=0, completed=3. THS-0001 (6abd2d41-a7fc-479d-992a-3a72558b30aa) is Submitted/Locked with reference PL0001. Under filter-pending it is now excluded regardless of the search query; only filter-all reveals it (with Submitted badge). Map info bar reads Total 3 / Pending 0 / Submitted-review 2 / Approved 1. No horizontal overflow at 360px on Properties or Water Survey list.",
+  "rca of the issue": "N/A — regression verified fixed. Root cause of prior QA finding was an early `return true` after text-match in PhedFieldSurvey.js filtered() which bypassed the pendingOnly gate when q was non-empty. Main agent's fix now applies pendingOnly && isSurveyed(p) => false at the end of the filter regardless of query, matching the surveyor Pending header count."
+}

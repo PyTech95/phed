@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import EmployeeLayout from '../../components/EmployeeLayout';
 import { Button } from '../../components/ui/button';
 import { useAuth } from '../../context/AuthContext';
@@ -126,14 +126,41 @@ const isCompleted = (status) => status === 'Approved';
 const withPhedStatus = (p) => {
   const st = p.phed_survey_state || p.phed_survey_status;
   const status = st === 'Approved' ? 'Approved'
-    : ['Submitted', 'Requires Review', 'Document Pending', 'Draft'].includes(st) ? 'Completed'
+    : st === 'Draft' ? 'In Progress'
+    : ['Submitted', 'Requires Review', 'Document Pending'].includes(st) ? 'Completed'
     : (!p.phed_survey_state && p.phed_survey_status === 'No PHED Connection') ? 'Approved'
     : 'Pending';
   return { ...p, mc_status: p.status, status, phed_outcome: p.phed_outcome || null };
 };
 
+const getMapStatusCounts = (properties) => {
+  const counts = {
+    total: properties.length,
+    pending: 0,
+    inProgress: 0,
+    submitted: 0,
+    approved: 0,
+    completed: 0,
+  };
+  properties.forEach((property) => {
+    const state = property.phed_survey_state || property.phed_survey_status;
+    if (state === 'Draft') {
+      counts.inProgress += 1;
+    } else if (property.status === 'Approved') {
+      counts.approved += 1;
+    } else if (property.status === 'Completed') {
+      counts.submitted += 1;
+    } else {
+      counts.pending += 1;
+    }
+  });
+  counts.completed = counts.submitted + counts.approved;
+  return counts;
+};
+
 export default function Properties() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = useAuth();
   
   const [loading, setLoading] = useState(true);
@@ -144,6 +171,8 @@ export default function Properties() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [mapError, setMapError] = useState('');
+  const [keyboardInset, setKeyboardInset] = useState(0);
   
   // GPS & Map state
   const [userLocation, setUserLocation] = useState(null);
@@ -160,9 +189,20 @@ export default function Properties() {
   
   const mapRef = useRef(null);
   const watchIdRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const propertyRequestRef = useRef(0);
+  const returnSearchQueryRef = useRef('');
+  const restoredSearchRef = useRef(false);
   
   // Stats
-  const [stats, setStats] = useState({ total: 0, pending: 0, completed: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    submitted: 0,
+    approved: 0,
+    completed: 0,
+  });
   const [mapFilter, setMapFilter] = useState(null); // 'Pending' | 'Completed' | 'Approved' | null (legend tap filter)
 
   // Add-new-property (surveyor) state
@@ -299,8 +339,27 @@ export default function Properties() {
     };
   }, []);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+    const updateKeyboardInset = () => {
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboardInset(inset);
+    };
+    updateKeyboardInset();
+    viewport.addEventListener('resize', updateKeyboardInset);
+    viewport.addEventListener('scroll', updateKeyboardInset);
+    return () => {
+      viewport.removeEventListener('resize', updateKeyboardInset);
+      viewport.removeEventListener('scroll', updateKeyboardInset);
+    };
+  }, []);
+
   // OPTIMIZED: Fetch with localStorage caching for faster reload
   const fetchProperties = async (forceRefresh = false) => {
+    const requestId = propertyRequestRef.current + 1;
+    propertyRequestRef.current = requestId;
+    setMapError('');
     try {
       // Check cache first (valid for 2 minutes)
       const cacheKey = 'surveyor_properties_cache';
@@ -312,10 +371,9 @@ export default function Properties() {
         const age = Date.now() - parseInt(cacheTime);
         if (age < 120000) { // 2 minutes cache
           const props = JSON.parse(cached).map(withPhedStatus);
+          if (requestId !== propertyRequestRef.current) return;
           setAllProperties(props);
-          const pending = props.filter(p => p.status === 'Pending').length;
-          const completed = props.filter(p => ['Completed', 'Approved', 'In Progress'].includes(p.status)).length;
-          setStats({ total: props.length, pending, completed });
+          setStats(getMapStatusCounts(props));
           setLoading(false);
           toast.success(`Loaded ${props.length} properties (cached)`);
           return;
@@ -326,6 +384,7 @@ export default function Properties() {
       const response = await axios.get(`${API_URL}/map/employee-properties`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (requestId !== propertyRequestRef.current) return;
       const props = (response.data.properties || []).map(withPhedStatus);
       setAllProperties(props);
       
@@ -333,9 +392,7 @@ export default function Properties() {
       localStorage.setItem(cacheKey, JSON.stringify(props));
       localStorage.setItem(cacheTimeKey, Date.now().toString());
       
-      const pending = props.filter(p => p.status === 'Pending').length;
-      const completed = props.filter(p => ['Completed', 'Approved', 'In Progress'].includes(p.status)).length;
-      setStats({ total: props.length, pending, completed });
+      setStats(getMapStatusCounts(props));
       
       // Set initial center if no saved position
       const savedPosition = localStorage.getItem('surveyor_map_position');
@@ -352,9 +409,11 @@ export default function Properties() {
       
       toast.success(`Loaded ${props.length} properties`);
     } catch (error) {
+      if (requestId !== propertyRequestRef.current) return;
+      setMapError('Properties load नहीं हुईं। कृपया Refresh दबाएँ।');
       toast.error('Failed to load properties');
     } finally {
-      setLoading(false);
+      if (requestId === propertyRequestRef.current) setLoading(false);
     }
   };
 
@@ -492,10 +551,12 @@ export default function Properties() {
     }).slice(0, 10); // Limit to 10 results
     
     setSearchResults(results);
-    setShowSearchResults(results.length > 0);
+    setShowSearchResults(true);
   };
 
   const selectSearchResult = (property) => {
+    returnSearchQueryRef.current = searchQuery;
+    searchInputRef.current?.blur();
     // Center map on selected property
     setViewState(prev => ({
       ...prev,
@@ -519,7 +580,30 @@ export default function Properties() {
     setSearchQuery('');
     setSearchResults([]);
     setShowSearchResults(false);
+    searchInputRef.current?.focus();
   };
+
+  const startSurveyForProperty = (property) => {
+    if (!property?.id) {
+      toast.error('Property ID नहीं मिला। कृपया list से property फिर चुनें।');
+      return;
+    }
+    searchInputRef.current?.blur();
+    setSelectedProperty(null);
+    navigate(`/employee/phed-survey/${property.id}`, {
+      state: {
+        returnTo: '/employee/properties',
+        restoreSearchQuery: returnSearchQueryRef.current,
+      },
+    });
+  };
+
+  useEffect(() => {
+    const restoreSearchQuery = location.state?.restoreSearchQuery;
+    if (!restoreSearchQuery || restoredSearchRef.current || allProperties.length === 0) return;
+    restoredSearchRef.current = true;
+    handleSearch(restoreSearchQuery);
+  }, [allProperties, location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter and sort by distance - optimized for performance
   const sortedProperties = useMemo(() => {
@@ -820,15 +904,7 @@ export default function Properties() {
                 ) : (
                   <button 
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-4 rounded-xl text-base font-semibold flex items-center justify-center gap-2 shadow-lg"
-                    onClick={() => {
-                      localStorage.setItem('surveyor_map_position', JSON.stringify({
-                        lat: selectedProperty.latitude,
-                        lng: selectedProperty.longitude,
-                        zoom: viewState.zoom,
-                        bearing: viewState.bearing
-                      }));
-                      navigate(`/employee/phed-survey/${selectedProperty.id}`);
-                    }}
+                    onClick={() => startSurveyForProperty(selectedProperty)}
                     data-testid="survey-btn"
                   >
                     <FileText className="w-5 h-5" />
@@ -940,10 +1016,23 @@ export default function Properties() {
                 )}
               </div>
               <div className="text-sm">
-                <span className="text-red-600 font-bold">{stats.pending}</span>
+                <span className="text-red-600 font-bold" data-testid="map-pending-count">
+                  {stats.pending}
+                </span>
                 <span className="text-slate-500"> pending</span>
+                {stats.inProgress > 0 && (
+                  <>
+                    <span className="mx-2 text-slate-300">|</span>
+                    <span className="font-bold text-amber-600" data-testid="map-in-progress-count">
+                      {stats.inProgress}
+                    </span>
+                    <span className="text-slate-500"> in progress</span>
+                  </>
+                )}
                 <span className="mx-2 text-slate-300">|</span>
-                <span className="text-emerald-600 font-bold">{stats.completed}</span>
+                <span className="text-emerald-600 font-bold" data-testid="map-done-count">
+                  {stats.completed}
+                </span>
                 <span className="text-slate-500"> done</span>
               </div>
             </div>
@@ -959,16 +1048,19 @@ export default function Properties() {
                 <Plus className="w-4 h-4" /> <span className="text-xs font-semibold">Add</span>
               </button>
               {/* Rotation indicator */}
-              <div 
+              <button
+                type="button"
                 className={`flex items-center gap-1 px-2 py-1 rounded-lg ${autoRotate ? 'bg-emerald-600' : 'bg-blue-700'}`}
                 onClick={toggleAutoRotate}
+                data-testid="map-heading-toggle-button"
+                aria-label="Toggle map auto-rotate"
               >
                 <Compass 
                   className="w-5 h-5 text-white"
                   style={{ transform: `rotate(${viewState.bearing}deg)`, transition: 'transform 0.15s ease-out' }}
                 />
                 <span className="text-xs font-mono text-white">{Math.round(viewState.bearing)}°</span>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -982,6 +1074,7 @@ export default function Properties() {
               </div>
               <input
                 type="text"
+                ref={searchInputRef}
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Search Property ID, mobile, serial no., name..."
@@ -1001,13 +1094,17 @@ export default function Properties() {
             
             {/* Search Results Dropdown */}
             {showSearchResults && searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg max-h-64 overflow-y-auto z-50">
+              <div
+                className="absolute top-full left-0 right-0 z-50 mt-1 overflow-y-auto rounded-xl bg-white shadow-lg"
+                style={{ maxHeight: `max(11rem, calc(100dvh - 230px - ${keyboardInset}px))` }}
+                data-testid="property-search-results"
+              >
                 {searchResults.map((property, index) => (
                   <div
                     key={property.id}
                     onClick={() => selectSearchResult(property)}
                     className={`px-4 py-3 cursor-pointer hover:bg-blue-50 flex items-center gap-3 ${index !== searchResults.length - 1 ? 'border-b border-gray-100' : ''}`}
-                    data-testid={`search-result-${index}`}
+                    data-testid={`search-result-${property.id}`}
                   >
                     <div 
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
@@ -1047,8 +1144,11 @@ export default function Properties() {
             
             {/* No results message */}
             {showSearchResults && searchResults.length === 0 && searchQuery.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg p-4 text-center text-gray-500 text-sm">
-                No properties found for &quot;{searchQuery}&quot;
+              <div
+                className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl bg-white p-4 text-center text-sm text-gray-500 shadow-lg"
+                data-testid="property-search-empty-state"
+              >
+                {mapError || `No properties found for "${searchQuery}"`}
               </div>
             )}
           </div>
@@ -1062,6 +1162,7 @@ export default function Properties() {
             className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg"
             onClick={refreshLocation}
             title="My location"
+            data-testid="map-my-location-button"
           >
             <LocateFixed className="w-6 h-6" />
           </Button>
@@ -1072,6 +1173,7 @@ export default function Properties() {
             className={`w-12 h-12 rounded-full shadow-lg ${autoRotate ? 'bg-green-600 hover:bg-green-700' : 'bg-slate-700 hover:bg-slate-600'}`}
             onClick={toggleAutoRotate}
             title="Auto-rotate with compass"
+            data-testid="map-auto-rotate-button"
           >
             <Compass className="w-6 h-6" />
           </Button>
@@ -1083,6 +1185,7 @@ export default function Properties() {
               className="w-12 h-12 rounded-full bg-orange-600 hover:bg-orange-700 shadow-lg"
               onClick={resetNorth}
               title="Reset to North"
+              data-testid="map-reset-north-button"
             >
               <span className="text-xs font-bold">N↑</span>
             </Button>
@@ -1095,22 +1198,27 @@ export default function Properties() {
             className="w-12 h-12 rounded-full bg-white shadow-lg"
             onClick={() => fetchProperties(true)}
             title="Refresh properties"
+            data-testid="map-refresh-properties-button"
           >
             <RefreshCw className="w-5 h-5 text-slate-700" />
           </Button>
         </div>
 
         {/* BOTTOM INFO BAR with Color Legend */}
-        <div className="absolute bottom-[68px] left-0 right-0 bg-white/95 backdrop-blur-sm text-slate-800 border-t border-slate-200 px-4 py-2.5 pointer-events-auto" data-testid="map-bottom-info-bar">
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
+        <div
+          className="absolute bottom-[68px] left-0 right-0 overflow-x-auto border-t border-slate-200 bg-white/95 px-3 py-2.5 text-slate-800 backdrop-blur-sm pointer-events-auto"
+          style={{ bottom: `calc(68px + ${keyboardInset}px)` }}
+          data-testid="map-bottom-info-bar"
+        >
+          <div className="flex min-w-max items-center gap-3">
+            <div className="shrink-0 text-sm">
               <span className="text-slate-500">Total: </span>
               <span className="font-bold text-lg text-slate-900">{sortedProperties.length}</span>
               <span className="text-slate-500"> properties</span>
             </div>
             
             {/* Color Legend with live counts — tap a colour to filter pins */}
-            <div className="flex items-center gap-2 text-xs" data-testid="surveyor-legend-counts">
+            <div className="flex shrink-0 items-center gap-2 text-xs" data-testid="surveyor-legend-counts">
               <button type="button" onClick={() => setMapFilter((s) => (s === 'Pending' ? null : 'Pending'))} data-testid="surveyor-legend-red"
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 border ${mapFilter === 'Pending' ? 'border-red-500 bg-red-50' : 'border-transparent'}`}>
                 <div className="w-3 h-3 rounded-full bg-red-500 border border-white"></div>
@@ -1119,18 +1227,18 @@ export default function Properties() {
               <button type="button" onClick={() => setMapFilter((s) => (s === 'Completed' ? null : 'Completed'))} data-testid="surveyor-legend-yellow"
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 border ${mapFilter === 'Completed' ? 'border-yellow-500 bg-yellow-50' : 'border-transparent'}`}>
                 <div className="w-3 h-3 rounded-full bg-yellow-500 border border-white"></div>
-                <span className="text-yellow-700">Submitted <b>{sortedProperties.filter(p => p.status === 'Completed').length}</b></span>
+                <span className="text-yellow-700">Submitted / review <b>{stats.submitted}</b></span>
               </button>
               <button type="button" onClick={() => setMapFilter((s) => (s === 'Approved' ? null : 'Approved'))} data-testid="surveyor-legend-green"
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 border ${mapFilter === 'Approved' ? 'border-green-600 bg-green-50' : 'border-transparent'}`}>
                 <div className="w-3 h-3 rounded-full bg-green-600 border border-white"></div>
-                <span className="text-emerald-700">Approved <b>{sortedProperties.filter(p => p.status === 'Approved').length}</b></span>
+                <span className="text-emerald-700">Approved <b>{stats.approved}</b></span>
               </button>
               {mapFilter && <button type="button" onClick={() => setMapFilter(null)} className="text-slate-500 underline" data-testid="surveyor-legend-clear">clear</button>}
             </div>
             
             {sortedProperties.length > 0 && sortedProperties[0].distance && (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+              <div className="hidden shrink-0 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 sm:flex">
                 <MapPin className="w-4 h-4 text-emerald-600" />
                 <span className="text-sm">
                   Nearest: <strong>{formatDistance(sortedProperties[0].distance)}</strong>

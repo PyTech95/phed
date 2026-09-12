@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 3 verification (read-only) after the safe UI submission of THS-0001 (record 6abd2d41-a7fc-479d-992a-3a72558b30aa) by surveyor1 in Property Locked mode. Backend (5/5 pytest passed): (a) /api/phed/my-progress returns total_properties=3, phed_pending=0, phed_in_progress=0, phed_completed=3 and satisfies total == pending+in_progress+completed; (b) /api/map/employee-properties returns THS-0001 with phed_survey_status=Submitted, phed_survey_state=Submitted, phed_outcome=LOCKED (surveyor-visible yellow/submitted state, not pending); (c) admin /api/phed/surveys?property_id=THS-0001 returns exactly ONE non-rejected survey with reference_number=PL0001, reference_code=PL, status=Submitted, property_record_id=6abd2d41-a7fc-479d-992a-3a72558b30aa, surveyor_id=58cc1f55-e82f-4afe-a057-fea837d1daec, water.property_locked=true — no duplicate created; (d) both endpoints reject unauthenticated requests (401/403). Frontend (Playwright, mobile 360/390/412): (1) /employee dashboard live PHED summary shows TOTAL 3 / PHED PENDING 0 / SURVEYED-DONE 3 / IN PROGRESS 0 — matches backend and refreshes on 'phed-survey-saved' CustomEvent (verified by dispatching the event without reload; values stayed correct, no crash, no re-mount required); (2) /employee/properties map-bottom-info-bar reads 'Total: 3 properties · Pending 0 · Submitted/review 2 · Approved 1' — THS-0001 no longer counted as pending; document.scrollWidth == clientWidth at 360/390/412 (no horizontal overflow); count strip labels readable and bottom nav (Home/Properties/Water Survey) reachable; (3) Water Supply Survey list (/employee/phed-survey): header shows '0 बाकी (pending) · 3/3 done'; with filter=Pending and NO search the list renders field-property-empty-state (THS-0001 not listed — correct); with filter=All and search 'THS-0001' the row field-property-6abd2d41-... appears with Badge='Submitted' (correct). Design note: when a user types an explicit search query, PhedFieldSurvey.js by design bypasses the Pending filter (line 157–163 comment: 'While searching, show every match regardless of the pending filter'), so THS-0001 becomes visible under Pending only when actively searched — this is intentional but is a minor UX inconsistency vs. the review request wording; the natural (unsearched) Pending list correctly excludes THS-0001.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/employee/phed-survey (Water Supply Survey list)", "issues": ["Intentional-by-code: search query overrides the Pending filter, so a Submitted property (THS-0001) appears under Pending when actively searched. Not a functional bug because count/empty-state without search is correct, but if the spec requires 'Pending filter never lists submitted rows even during search', tighten the filter in PhedFieldSurvey.js:157–163 to also apply pendingOnly when q is non-empty for non-admin users."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phed_iter3_post_submit.py",
+    "/app/test_reports/pytest/iter3.xml"
+  ],
+  "action_items": [
+    "Optional: In /app/frontend/src/views/employee/PhedFieldSurvey.js filtered() (line 157), keep the pendingOnly gate applied even when a search string is present (for non-admins) so that the Pending tab never shows submitted rows regardless of query. Currently pending count says 0 but the submitted THS-0001 becomes visible under Pending when user searches its code — a minor UX inconsistency."
+  ],
+  "critical_code_review_comments": [
+    "PhedFieldSurvey.js line 157–163 deliberately bypasses pendingOnly during search — document this behavior in-product or restrict it to admins only; it currently contradicts the surveyor-facing Pending header count.",
+    "phed.py at ~2372 lines and server.py very large — still recommend splitting into domain modules.",
+    "Consider exposing a surveyor-scoped GET /api/phed/my-surveys (currently /api/phed/surveys requires officer/admin) so the surveyor UI can verify last-submitted reference without officer access; today the client relies on the submit response only."
+  ],
+  "updated_files": ["/app/backend/tests/test_phed_iter3_post_submit.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (all verification checks green; 1 minor design note)"},
+  "test_credentials": "surveyor1 / Survey@2026 (Thanesar/THS); admin / Phed#Admin2026!",
+  "seed_data_creation": "None. Read-only verification. No writes performed. THS-0001 record unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After the safe submission, expected surveyor1 state is total_properties=3, phed_pending=0, phed_in_progress=0, phed_completed=3. THS-0001 (id 6abd2d41-a7fc-479d-992a-3a72558b30aa) has exactly one non-rejected survey with reference_number=PL0001 (Property Locked, PL prefix). The dashboard refreshes via the 'phed-survey-saved' CustomEvent — no full reload needed. Water Supply Survey list header uses '0 बाकी (pending) · 3/3 done'. Beware: PhedFieldSurvey.js intentionally shows searched rows regardless of Pending filter; use empty-search state to assert Pending list.",
+  "rca of the issue": "N/A — verification confirmed all six review items. Only optional refinement: tighten Pending filter to keep pendingOnly gate even when a search query is entered (line 157–163)."
+}

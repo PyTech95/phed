@@ -376,40 +376,22 @@ export default function PhedSurveys() {
       </CardContent></Card>
 
       <Dialog open={!!detailSurvey} onOpenChange={(o) => { if (!o) { setDetailSurvey(null); setDetail(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="survey-detail-dialog">
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto" data-testid="survey-detail-dialog">
           <DialogHeader><DialogTitle style={{ color: 'var(--phed-ink)' }}>Survey — {detailSurvey?.property_id}{detailSurvey?.reference_number ? <span className="ml-2 font-mono text-blue-700" data-testid="detail-ref">{detailSurvey.reference_number}</span> : null}</DialogTitle></DialogHeader>
           {detailSurvey && (
             <div className="space-y-5 text-sm">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" data-testid="survey-review-header-summary">
                 <Badge className={STATUS_STYLE[detailSurvey.status]}>{detailSurvey.status}</Badge>
-                <Badge variant="outline">{connectionLabel(detailSurvey)}</Badge>
+                <Badge variant="outline" data-testid="survey-review-decision-badge">
+                  Surveyor decision: {connectionLabel(detailSurvey)}
+                </Badge>
                 <Badge variant="outline">Surveyor: {detailSurvey.surveyor_name || '—'}</Badge>
                 {detailSurvey.ward_number && <Badge variant="outline">Ward {detailSurvey.ward_number}</Badge>}
               </div>
 
-              {detail?.property && (
-                <div className="rounded-lg border p-3" style={{ borderColor: 'var(--phed-border)' }}>
-                  <div className="font-semibold" style={{ color: 'var(--phed-ink)' }}>{detail.property.owner_name}</div>
-                  <div className="text-xs text-slate-500">{detail.property.address} · {detail.property.colony}</div>
-                </div>
-              )}
-
-              {detailSurvey.water && Object.keys(detailSurvey.water).length > 0 && (
-                <WaterDetails w={detailSurvey.water} type={detailSurvey.survey_type} />
-              )}
-
-              <div>
-                <div className="font-semibold mb-1" style={{ color: 'var(--phed-ink)' }}>Linked consumers</div>
-                {(detail?.consumers || []).length === 0 ? <div className="text-xs text-slate-400">None</div> :
-                  detail.consumers.map((c) => (
-                    <div key={c.id} className="text-xs border-b py-1" style={{ borderColor: 'var(--phed-border)' }}>
-                      <span className="font-medium">{c.consumer_name}</span> <span className="font-mono text-slate-500">{c.consumer_id}</span>
-                      {(c.connections || []).map((cn) => (
-                        <Badge key={cn.id} variant="outline" className="ml-1 text-[10px] font-mono" style={cn.service === 'Water' ? { color: '#1565C0' } : { color: '#00897B' }}>
-                          {cn.service === 'Water' ? <Droplet className="w-3 h-3 inline mr-0.5" /> : <Waves className="w-3 h-3 inline mr-0.5" />}{cn.connection_number}
-                        </Badge>))}
-                    </div>
-                  ))}
+              <div className="grid gap-4 lg:grid-cols-2" data-testid="survey-review-comparison">
+                <McPropertyDetails property={detail?.property} />
+                <PhedSurveyorDetails survey={detailSurvey} consumers={detail?.consumers || []} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -512,9 +494,9 @@ function WaterDetails({ w, type }) {
     </div>
   );
   return (
-    <div className="rounded-lg border p-3" style={{ borderColor: 'var(--phed-border)' }} data-testid="water-survey-details">
+    <div data-testid="water-survey-details">
       <div className="font-semibold mb-1 flex items-center gap-1.5" style={{ color: 'var(--phed-ink)' }}>
-        <Droplet className="w-4 h-4 text-blue-600" /> Water / Sewer survey
+        <Droplet className="w-4 h-4 text-blue-600" /> Surveyor-recorded PHED detail
       </div>
       {w.document_pending && (
         <div className="rounded bg-orange-50 border border-orange-200 px-2 py-1.5 text-[11px] text-orange-700 mb-2" data-testid="doc-pending-flag">
@@ -533,6 +515,108 @@ function WaterDetails({ w, type }) {
       {w.new_owner_name && <Item label="New owner" value={w.new_owner_name} />}
       {w.new_ward && <Item label="New ward" value={w.new_ward} />}
       {w.new_address && <Item label="New address" value={w.new_address} />}
+    </div>
+  );
+}
+
+function McPropertyDetails({ property }) {
+  if (!property) {
+    return (
+      <section
+        className="border p-4"
+        style={{ borderColor: 'var(--phed-border)' }}
+        data-testid="mc-property-details-unavailable"
+      >
+        <h3 className="font-semibold" style={{ color: 'var(--phed-ink)' }}>MC property details</h3>
+        <p className="mt-2 text-sm text-slate-500">MC property details could not be loaded.</p>
+      </section>
+    );
+  }
+  return (
+    <section
+      className="border p-4"
+      style={{ borderColor: 'var(--phed-border)' }}
+      data-testid="mc-property-details"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="font-semibold" style={{ color: 'var(--phed-ink)' }}>MC property details</h3>
+        <Badge variant="outline" className="font-mono text-[10px]">{property.property_id || '—'}</Badge>
+      </div>
+      <DetailPair label="Owner name" value={property.owner_name} testid="mc-owner-name" />
+      <DetailPair label="Mobile" value={property.mobile} testid="mc-mobile" mono />
+      <DetailPair label="Ward" value={property.ward} testid="mc-ward" />
+      <DetailPair label="Colony" value={property.colony} testid="mc-colony" />
+      <DetailPair label="Address" value={property.address} testid="mc-address" />
+      <DetailPair label="Serial number" value={property.serial_number} testid="mc-serial-number" mono />
+      <DetailPair label="MC property status" value={property.status} testid="mc-property-status" />
+    </section>
+  );
+}
+
+function PhedSurveyorDetails({ survey, consumers }) {
+  const water = survey.water || {};
+  return (
+    <section
+      className="border p-4"
+      style={{ borderColor: 'var(--phed-border)' }}
+      data-testid="phed-surveyor-details"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold" style={{ color: 'var(--phed-ink)' }}>PHED &amp; surveyor details</h3>
+        <Badge variant="outline" className="text-[10px]" data-testid="phed-surveyor-decision">
+          {connectionLabel(survey)}
+        </Badge>
+      </div>
+      <DetailPair label="Surveyor" value={survey.surveyor_name} testid="phed-surveyor-name" />
+      <DetailPair label="PHED consumer ID" value={consumerIdOf(survey)} testid="phed-consumer-id" mono />
+      <DetailPair label="PHED consumer name" value={water.consumer_name} testid="phed-consumer-name" />
+      {Object.keys(water).length > 0 && <WaterDetails w={water} type={survey.survey_type} />}
+      <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--phed-border)' }}>
+        <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Linked PHED master data</div>
+        {consumers.length === 0 ? (
+          <p className="text-xs text-slate-400" data-testid="phed-linked-consumers-empty">No linked PHED consumer.</p>
+        ) : consumers.map((consumer) => (
+          <div
+            key={consumer.id}
+            className="border-b py-2 text-xs last:border-0"
+            style={{ borderColor: 'var(--phed-border)' }}
+            data-testid={`phed-linked-consumer-${consumer.id}`}
+          >
+            <span className="font-medium">{consumer.consumer_name}</span>
+            <span className="ml-1 font-mono text-slate-500">{consumer.consumer_id}</span>
+            {(consumer.connections || []).map((connection) => (
+              <Badge
+                key={connection.id}
+                variant="outline"
+                className="ml-1 text-[10px] font-mono"
+                style={connection.service === 'Water' ? { color: '#1565C0' } : { color: '#00897B' }}
+              >
+                {connection.service === 'Water' ? (
+                  <Droplet className="mr-0.5 inline h-3 w-3" />
+                ) : (
+                  <Waves className="mr-0.5 inline h-3 w-3" />
+                )}
+                {connection.connection_number}
+              </Badge>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DetailPair({ label, value, testid, mono = false }) {
+  return (
+    <div className="flex justify-between gap-4 border-b py-2 last:border-0" style={{ borderColor: 'var(--phed-border)' }}>
+      <span className="shrink-0 text-xs text-slate-500">{label}</span>
+      <span
+        className={`text-right text-xs font-medium ${mono ? 'font-mono' : ''}`}
+        style={{ color: 'var(--phed-ink)' }}
+        data-testid={testid}
+      >
+        {value || '—'}
+      </span>
     </div>
   );
 }

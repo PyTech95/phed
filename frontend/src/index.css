@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.font-heading {
+    font-family: 'Manrope', sans-serif;
+}
+
+.font-body {
+    font-family: 'Inter', sans-serif;
+}
+
+.font-mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+code {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+    :root {
+        --background: 208 37% 97%;
+        --foreground: 222.2 84% 4.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 222.2 84% 4.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222.2 84% 4.9%;
+        --primary: 210 79% 42%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222.2 47.4% 11.2%;
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 174 100% 27%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 210 79% 42%;
+        --radius: 0.5rem;
+        --chart-1: 210 79% 42%;
+        --chart-2: 174 100% 27%;
+        --chart-3: 152 60% 40%;
+        --chart-4: 43 74% 66%;
+        --chart-5: 27 87% 67%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply text-slate-900;
+        background: #F4F8FB;
+    }
+}
+
+/* Status badge styles */
+.badge-pending {
+    @apply inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700;
+}
+
+.badge-completed {
+    @apply inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700;
+}
+
+.badge-flagged {
+    @apply inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700;
+}
+
+.badge-in-progress {
+    @apply inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700;
+}
+
+/* Card styles */
+.stat-card {
+    @apply p-6 bg-white border border-slate-100 shadow-sm rounded-lg flex flex-col gap-2;
+}
+
+.property-card {
+    @apply p-4 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer;
+}
+
+/* Mobile action button */
+.mobile-action-btn {
+    @apply w-full h-12 text-lg font-bold bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-transform;
+}
+
+/* Bottom navigation */
+.bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 p-4 flex justify-around z-50;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid #DCE6F0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F4F8FB;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(21, 101, 192, 0.25);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(21, 101, 192, 0.45);
+}
+
+/* Hide emergent badge */
+#emergent-badge {
+    display: none !important;
+}
+
+a[href*="emergent.sh"] {
+    display: none !important;
+}
+
+/* Fix Dialog z-index to appear above Leaflet maps */
+[data-radix-dialog-overlay] {
+    z-index: 9998 !important;
+}
+
+[data-radix-dialog-content] {
+    z-index: 9999 !important;
+}
+
+/* Leaflet map z-index */
+.leaflet-container {
+    z-index: 1 !important;
+}
+
+.leaflet-pane {
+    z-index: 1 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+    z-index: 500 !important;
+}
+
+.leaflet-popup {
+    z-index: 700 !important;
+}
+
+/* Compact popup for admin map */
+.compact-popup .leaflet-popup-content-wrapper {
+    padding: 6px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+
+.compact-popup .leaflet-popup-content {
+    margin: 6px;
+    width: auto !important;
+    min-width: 160px;
+    max-width: 220px;
+}
+
+.compact-popup .leaflet-popup-close-button {
+    top: 4px;
+    right: 6px;
+    font-size: 16px;
+    color: #666;
+}
+
+.compact-popup .leaflet-popup-tip {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}

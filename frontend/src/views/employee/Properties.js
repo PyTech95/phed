@@ -9,7 +9,7 @@ import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { 
   MapPin, Navigation, FileText, Loader2, RefreshCw, 
-  Compass, LocateFixed, Search, X, CheckCircle, XCircle, AlertTriangle, Lock, Plus
+  Compass, LocateFixed, Search, X, CheckCircle, XCircle, AlertTriangle, Lock, Plus, Phone
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -984,7 +984,7 @@ export default function Properties() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search Property ID, Serial No, Name..."
+                placeholder="Search Property ID, mobile, serial no., name..."
                 className="flex-1 px-3 py-3 text-gray-800 placeholder-gray-400 outline-none text-sm"
                 data-testid="property-search-input"
               />
@@ -992,6 +992,7 @@ export default function Properties() {
                 <button 
                   onClick={clearSearch}
                   className="pr-4 text-gray-400 hover:text-gray-600"
+                  data-testid="clear-property-search-button"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1016,10 +1017,19 @@ export default function Properties() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-900 truncate">{property.owner_name}</div>
-                      <div className="text-xs text-gray-500 flex items-center gap-2">
-                        <span className="font-mono">{property.property_id}</span>
-                        <span>•</span>
-                        <span>{property.colony}</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                        <span className="font-mono" data-testid={`search-result-property-id-${property.id}`}>
+                          Property ID: {property.property_id || '—'}
+                        </span>
+                        <span aria-hidden="true">•</span>
+                        <span>{property.colony || '—'}</span>
+                      </div>
+                      <div
+                        className="mt-1 flex items-center gap-1 text-xs text-slate-600"
+                        data-testid={`search-result-mobile-${property.id}`}
+                      >
+                        <Phone className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                        <span>Mobile: {property.mobile || 'उपलब्ध नहीं'}</span>
                       </div>
                     </div>
                     <div className={`text-xs px-2 py-0.5 rounded-full ${

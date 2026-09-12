@@ -151,3 +151,9 @@ Fixes:
 - PhedSurveys.js review table: Property ID → Consumer ID (water.consumer_id / first connection no.), added Name (water.new_owner_name || consumer_name || owner), removed GPS column, kept Ref no. + Surveyor. Type now shows the surveyor's outcome via surveyTypeLabel(): NO_CONNECTION / water.new_connection → "New Connection", property_locked → "Property Locked", owner_denied → "Owner Denied", else the type label. Admin list search also matches water.consumer_id/consumer_name/new_owner_name/connection_numbers.
 - Water Survey tab (PhedFieldSurvey.js) search is now PHED-based: debounced call to /phed/consumers/search matches Consumer ID / connection no. / phone / name and surfaces the linked property (union with property-field match); a search overrides the pending-only filter. Placeholder updated. Property tab search unchanged (property fields).
 - Verified via API + Playwright: table shows 4326479 / Suman Devi / New Connection / Ramesh Kumar; surveyor search "4326479" surfaces the linked property. No page errors. Frontend rebuilt (next start).
+
+## Surveyor property-search mobile number (2026-09-12)
+- Surveyor Property Map search dropdown (`frontend/src/views/employee/Properties.js`) now shows a clear `Property ID: <id>` line and a second, phone-icon line: `Mobile: <number>`.
+- The search hint now explicitly includes mobile numbers. When a property has no recorded number, the dropdown shows `Mobile: उपलब्ध नहीं` instead of a blank gap.
+- Created the documented test surveyor `surveyor1` / `Survey@2026`, assigned to Thanesar (THS), Ward 1, and seeded three assigned verification properties.
+- Verified on the mobile preview as surveyor: searching `THS` returned 3 results and displayed `Mobile: 9000000003` on the first result. Production frontend build completed successfully.

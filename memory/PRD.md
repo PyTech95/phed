@@ -157,3 +157,10 @@ Fixes:
 - The search hint now explicitly includes mobile numbers. When a property has no recorded number, the dropdown shows `Mobile: उपलब्ध नहीं` instead of a blank gap.
 - Created the documented test surveyor `surveyor1` / `Survey@2026`, assigned to Thanesar (THS), Ward 1, and seeded three assigned verification properties.
 - Verified on the mobile preview as surveyor: searching `THS` returned 3 results and displayed `Mobile: 9000000003` on the first result. Production frontend build completed successfully.
+
+## Simplified PHED dashboard + Today Report (2026-09-12)
+- Main PHED Dashboard is now grouped into three scannable sections: Property reporting; PHED consumers & services; and Survey report.
+- Removed the non-actionable `Total Connections` dashboard card. Kept Total Existing/Target/Pending/In Progress properties; added clear Total Consumers (PHED), Water Connections, Sewer Connections; and retained only useful field outcomes: completed, linked/not linked, no connection, new PHED connection, already verified, property locked, and owner denied.
+- Added `GET /api/phed/dashboard/today`: UTC today-only submitted work, in-progress drafts, approval status, outcome totals, linked-property count, surveyor-wise breakdown, and the 50 most recent submitted property reports.
+- Added `/admin/phed/today` and the `Today's PHED Report` sidebar item. The page offers daily metric groups, a surveyor-work table, submitted-property detail, and manual refresh.
+- Verified by testing agent (backend + desktop/mobile frontend): 100% pass. Main dashboard no longer includes `Total Connections`; daily endpoint is authenticated and returns all expected fields; both pages have no page-level mobile overflow; surveyor mobile-search flow continues working.

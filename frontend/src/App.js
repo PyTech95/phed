@@ -21,6 +21,7 @@ import PhedConsumers from "./views/admin/PhedConsumers";
 import PhedImport from "./views/admin/PhedImport";
 import PhedLocationPending from "./views/admin/LocationPending";
 import PhedSurveys from "./views/admin/PhedSurveys";
+import PhedTodayDashboard from "./views/admin/PhedTodayDashboard";
 import EmployeeDashboard from "./views/employee/Dashboard";
 import EmployeeProperties from "./views/employee/Properties";
 import EmployeeSurvey from "./views/employee/Survey";
@@ -182,6 +183,11 @@ function AppRoutes() {
       <Route path="/admin/phed" element={
         <ProtectedRoute allowedRoles={ADMIN_VIEW_ROLES}>
           <PhedDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/phed/today" element={
+        <ProtectedRoute allowedRoles={ADMIN_VIEW_ROLES}>
+          <PhedTodayDashboard />
         </ProtectedRoute>
       } />
       <Route path="/admin/phed/consumers" element={

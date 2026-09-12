@@ -8,8 +8,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import {
-  Users, Droplet, Waves, Link2, ClipboardList, CheckCircle2, XCircle, Clock,
-  MapPin, Building2, UserCheck, GitMerge, AlertTriangle, FilePlus, HelpCircle,
+  Users, Droplet, Waves, Link2, CheckCircle2, XCircle, Clock, MapPin, Building2,
+  UserCheck, FilePlus, HelpCircle,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -34,34 +34,27 @@ export default function PhedDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const s = stats || {};
-  const cards = [
+  const propertyCards = [
     { label: 'Total Existing Properties', value: s.total_properties, icon: Building2, color: '#1565C0' },
     { label: 'PHED Target Properties', value: s.target_properties, icon: MapPin, color: '#1565C0' },
     { label: 'PHED Surveys Pending', value: s.properties_pending, icon: Clock, color: '#F57C00' },
     { label: 'PHED Surveys In Progress', value: s.properties_in_progress, icon: Clock, color: '#FB8C00' },
+  ];
+  const consumerCards = [
+    { label: 'Total Consumers (PHED)', value: s.total_consumers, icon: Users, color: '#1565C0' },
+    { label: 'Water Connections', value: s.water_connections, icon: Droplet, color: '#1E88E5' },
+    { label: 'Sewer Connections', value: s.sewer_connections, icon: Waves, color: '#00897B' },
+  ];
+  const reportCards = [
     { label: 'PHED Surveys Completed', value: s.properties_completed, icon: CheckCircle2, color: '#2E7D32' },
     { label: 'Properties Linked with PHED', value: s.properties_linked, icon: Link2, color: '#00897B' },
     { label: 'Properties Not Linked', value: s.properties_not_linked, icon: XCircle, color: '#757575' },
     { label: 'No PHED Connection', value: s.properties_no_connection, icon: XCircle, color: '#6D4C41' },
-    { label: 'New/Unlisted Connections', value: s.new_unlisted_connections, icon: UserCheck, color: '#5E35B1' },
-    { label: 'Total Consumers', value: s.total_consumers, icon: Users, color: '#1565C0' },
-    { label: 'Total Connections', value: s.total_connections, icon: Link2, color: '#1565C0' },
-    { label: 'Water Connections', value: s.water_connections, icon: Droplet, color: '#1E88E5' },
-    { label: 'Sewer Connections', value: s.sewer_connections, icon: Waves, color: '#00897B' },
-    { label: 'Properties with Multiple Connections', value: s.properties_multi_connection, icon: GitMerge, color: '#5E35B1' },
-    { label: 'Submitted Surveys', value: s.submitted_surveys, icon: Clock, color: '#1E88E5' },
-    { label: 'Approved Surveys', value: s.approved_surveys, icon: CheckCircle2, color: '#2E7D32' },
-    { label: 'New Connection (survey)', value: (s.by_outcome || {}).new_connection, icon: FilePlus, color: '#5E35B1' },
+    { label: 'New PHED Connection', value: (s.by_outcome || {}).new_connection, icon: FilePlus, color: '#5E35B1' },
+    { label: 'Already Connection Verified', value: (s.by_outcome || {}).has_connection, icon: Droplet, color: '#1E88E5' },
     { label: 'Property Locked', value: (s.by_outcome || {}).property_locked, icon: HelpCircle, color: '#455A64' },
     { label: 'Owner Denied', value: (s.by_outcome || {}).owner_denied, icon: XCircle, color: '#C62828' },
-    { label: 'Has Connection', value: (s.by_outcome || {}).has_connection, icon: Droplet, color: '#1E88E5' },
-    { label: 'Rejected / Review Required', value: (s.rejected_surveys || 0) + (s.review_surveys || 0), icon: AlertTriangle, color: '#C62828' },
-    { label: 'Completed Wards', value: s.completed_wards, icon: CheckCircle2, color: '#2E7D32' },
-    { label: 'Completed Colonies', value: s.completed_colonies, icon: CheckCircle2, color: '#2E7D32' },
-    { label: 'Active Surveyors', value: s.active_surveyors, icon: UserCheck, color: '#00897B' },
   ];
-
-  const bySurvey = s.by_survey_type || {};
 
   return (
     <AdminLayout title="PHED Dashboard">
@@ -90,41 +83,9 @@ export default function PhedDashboard() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {cards.map((c) => (
-          <Card key={c.label} className="clinic-card" data-testid={`stat-${c.label.replace(/\s+/g, '-').toLowerCase()}`}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--phed-muted)' }}>{c.label}</span>
-                <c.icon className="w-5 h-5" style={{ color: c.color }} />
-              </div>
-              <div className="text-3xl font-extrabold mt-2" style={{ color: 'var(--phed-ink)' }}>{stats === null ? '…' : (c.value ?? 0)}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="clinic-card mt-5">
-        <CardContent className="p-5">
-          <div className="text-sm font-semibold mb-3" style={{ color: 'var(--phed-ink)' }}>Surveys by type</div>
-          <div className="grid grid-cols-3 gap-4">
-            {[['Existing linked', bySurvey.existing_linked, ClipboardList, '#1565C0'],
-              ['New / unlisted', bySurvey.new_unlisted, FilePlus, '#00897B'],
-              ['No connection', bySurvey.no_connection, HelpCircle, '#F57C00']].map(([label, val, Icon, color]) => (
-              <div key={label} className="rounded-xl border p-4" style={{ borderColor: 'var(--phed-border)' }}>
-                <Icon className="w-5 h-5 mb-1" style={{ color }} />
-                <div className="text-2xl font-bold" style={{ color: 'var(--phed-ink)' }}>{val ?? 0}</div>
-                <div className="text-xs" style={{ color: 'var(--phed-muted)' }}>{label}</div>
-              </div>
-            ))}
-          </div>
-          {s.gps_flagged > 0 && (
-            <div className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" /> {s.gps_flagged} survey(s) flagged for large GPS drift — needs review.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <DashboardGroup title="Property reporting" cards={propertyCards} loading={stats === null} />
+      <DashboardGroup title="PHED consumers & services" cards={consumerCards} loading={stats === null} />
+      <DashboardGroup title="Survey report" cards={reportCards} loading={stats === null} />
 
       <Card className="clinic-card mt-5">
         <CardContent className="p-5">
@@ -172,6 +133,35 @@ export default function PhedDashboard() {
         </CardContent>
       </Card>
     </AdminLayout>
+  );
+}
+
+function DashboardGroup({ title, cards, loading }) {
+  return (
+    <section className="mt-6" data-testid={`dashboard-group-${title.replace(/\s+/g, '-').toLowerCase()}`}>
+      <h2 className="mb-3 text-lg font-semibold" style={{ color: 'var(--phed-ink)' }}>{title}</h2>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+        {cards.map((card) => (
+          <Card
+            key={card.label}
+            className="clinic-card"
+            data-testid={`stat-${card.label.replace(/\s+/g, '-').toLowerCase()}`}
+          >
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs uppercase tracking-wide" style={{ color: 'var(--phed-muted)' }}>
+                  {card.label}
+                </span>
+                <card.icon className="h-5 w-5 shrink-0" style={{ color: card.color }} />
+              </div>
+              <div className="mt-2 text-3xl font-extrabold" style={{ color: 'var(--phed-ink)' }}>
+                {loading ? '…' : (card.value ?? 0)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }
 

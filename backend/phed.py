@@ -2131,6 +2131,139 @@ async def phed_dashboard(ward_id: Optional[str] = None, colony: Optional[str] = 
     }
 
 
+def _survey_outcome_code(survey: dict) -> str:
+    """Normalize the field-survey answer into one reporting outcome."""
+    water = survey.get("water") or {}
+    if water.get("property_locked"):
+        return "property_locked"
+    if water.get("owner_denied"):
+        return "owner_denied"
+    if survey.get("survey_type") == "NO_CONNECTION" or water.get("new_connection"):
+        return "new_connection"
+    if water.get("has_connection"):
+        return "already_verified"
+    return "other"
+
+
+@phed_router.get("/dashboard/today")
+async def phed_today_dashboard(
+    ward_id: Optional[str] = None,
+    colony: Optional[str] = None,
+    surveyor_id: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """Today-only PHED survey progress and surveyor-wise operational report."""
+    require_officer(user)
+    db = get_db()
+    today_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00")
+    base: Dict[str, Any] = {}
+    if ward_id:
+        base["ward_id"] = ward_id
+    if colony:
+        base["colony_name"] = colony
+    if surveyor_id:
+        base["surveyor_id"] = surveyor_id
+
+    submitted_statuses = ["Submitted", "Requires Review", "Document Pending", "Approved"]
+    submitted_q = {
+        **base,
+        "submitted_at": {"$gte": today_start},
+        "status": {"$in": submitted_statuses},
+    }
+    projection = {
+        "_id": 0,
+        "id": 1,
+        "property_record_id": 1,
+        "property_id": 1,
+        "surveyor_id": 1,
+        "surveyor_name": 1,
+        "status": 1,
+        "survey_type": 1,
+        "water": 1,
+        "submitted_at": 1,
+        "updated_at": 1,
+    }
+    surveys = await db.phed_surveys.find(submitted_q, projection).to_list(None)
+    in_progress_q = {**base, "status": "Draft", "updated_at": {"$gte": today_start}}
+    in_progress = await db.phed_surveys.find(in_progress_q, projection).to_list(None)
+    property_ids = {s.get("property_record_id") for s in surveys if s.get("property_record_id")}
+    linked_ids = set()
+    if property_ids:
+        linked_ids = set(
+            await db.phed_consumers.distinct(
+                "linked_property_id",
+                {"is_active": True, "linked_property_id": {"$in": list(property_ids)}},
+            )
+        )
+
+    totals = {
+        "total": len(surveys),
+        "awaiting_approval": 0,
+        "approved": 0,
+        "already_verified": 0,
+        "new_connection": 0,
+        "property_locked": 0,
+        "owner_denied": 0,
+        "no_phed_connection": 0,
+        "properties_linked": len(linked_ids),
+        "in_progress": len(in_progress),
+    }
+    by_surveyor: Dict[str, dict] = {}
+
+    def surveyor_summary(survey: dict) -> dict:
+        key = survey.get("surveyor_id") or "unassigned"
+        if key not in by_surveyor:
+            by_surveyor[key] = {
+                "id": key,
+                "name": survey.get("surveyor_name") or "Unassigned",
+                "total": 0,
+                "awaiting_approval": 0,
+                "approved": 0,
+                "already_verified": 0,
+                "new_connection": 0,
+                "property_locked": 0,
+                "owner_denied": 0,
+                "in_progress": 0,
+            }
+        return by_surveyor[key]
+
+    for survey in surveys:
+        outcome = _survey_outcome_code(survey)
+        summary = surveyor_summary(survey)
+        totals[outcome] = totals.get(outcome, 0) + 1
+        summary["total"] += 1
+        summary[outcome] = summary.get(outcome, 0) + 1
+        if survey.get("survey_type") == "NO_CONNECTION":
+            totals["no_phed_connection"] += 1
+        if survey.get("status") == "Approved":
+            totals["approved"] += 1
+            summary["approved"] += 1
+        else:
+            totals["awaiting_approval"] += 1
+            summary["awaiting_approval"] += 1
+
+    for survey in in_progress:
+        surveyor_summary(survey)["in_progress"] += 1
+
+    recent_surveys = []
+    for survey in sorted(surveys, key=lambda item: item.get("submitted_at") or "", reverse=True)[:50]:
+        recent_surveys.append({
+            "id": survey.get("id"),
+            "property_id": survey.get("property_id") or "—",
+            "surveyor_name": survey.get("surveyor_name") or "Unassigned",
+            "status": survey.get("status") or "—",
+            "outcome": _survey_outcome_code(survey),
+            "submitted_at": survey.get("submitted_at") or survey.get("updated_at") or "",
+        })
+
+    return {
+        "report_date": today_start[:10],
+        "summary": totals,
+        "by_surveyor": sorted(by_surveyor.values(), key=lambda item: item["total"], reverse=True),
+        "recent_surveys": recent_surveys,
+    }
+
+
 @phed_router.get("/filters")
 async def filter_options(user: dict = Depends(get_current_user)):
     require_officer(user)

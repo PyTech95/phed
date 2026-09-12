@@ -22,7 +22,8 @@ import {
   Database,
   MapPin,
   ClipboardList,
-  ScrollText
+  ScrollText,
+  CalendarDays
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -31,6 +32,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 // All navigation items with permission keys
 const allNavItems = [
   { path: '/admin', icon: Droplet, label: 'PHED Dashboard', permission: 'dashboard' },
+  { path: '/admin/phed/today', icon: CalendarDays, label: "Today's PHED Report", permission: 'dashboard' },
   { path: '/admin/phed/consumers', icon: ClipboardList, label: 'PHED Consumers', permission: 'properties' },
   { path: '/admin/phed/surveys', icon: ClipboardCheck, label: 'PHED Surveys', permission: 'submissions' },
   { path: '/admin/phed/import', icon: Database, label: 'PHED Import', permission: 'upload' },
@@ -147,6 +149,7 @@ export default function AdminLayout({ children, title }) {
                 to={item.path}
                 className={`sidebar-link ${isActive ? 'active' : ''}`}
                 onClick={() => setSidebarOpen(false)}
+                data-testid={`admin-nav-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
               >
                 <Icon className="w-4 h-4" />
                 <span className="text-sm">{item.label}</span>

@@ -159,7 +159,7 @@ function requiredDocs(mode, ownerChange, hasBoth) {
   return [];
 }
 
-export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
+export default function WaterSurveyPanel({ property, onBack, onNext, H, initialConsumer = null }) {
   const navigate = useNavigate();
   const [survey, setSurvey] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -248,6 +248,16 @@ export default function WaterSurveyPanel({ property, onBack, onNext, H }) {
       }
     }).catch((e) => { toast.error(e.response?.data?.detail || 'Access denied'); onBack(); }).finally(() => setLoading(false));
   }, [property.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!initialConsumer) return;
+    setPicked(initialConsumer);
+    setWaterNos(connsOf(initialConsumer, 'Water'));
+    setSewerNos(connsOf(initialConsumer, 'Sewer'));
+    if (initialConsumer.phone || initialConsumer.phone_masked) {
+      setMobile(initialConsumer.phone || initialConsumer.phone_masked);
+    }
+  }, [initialConsumer]);
 
   // live typeahead (debounced)
   useEffect(() => {

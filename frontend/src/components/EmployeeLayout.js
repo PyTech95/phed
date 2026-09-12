@@ -26,13 +26,14 @@ export default function EmployeeLayout({ children, title, showBackButton = false
   return (
     <div className="min-h-screen pb-20" style={{background: 'var(--phed-bg)'}}>
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b" style={{background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(12px)', borderColor: 'var(--phed-border)'}}>
+      <header className="surveyor-header sticky top-0 z-30 border-b" style={{background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(12px)', borderColor: 'var(--phed-border)'}}>
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
-            <img 
-              src="/phed-logo.png" 
-              alt="Public Health Engineering Department - (PHED)" 
-              className="w-10 h-10 object-contain rounded-full"
+            <img
+              src="/phed-logo.png"
+              alt="PHED Haryana"
+              className="h-11 w-11 object-contain"
+              data-testid="surveyor-phed-haryana-logo"
             />
             <div>
               <p className="text-[9px] font-bold uppercase tracking-wider leading-none" style={{color: 'var(--phed-blue)'}}>PHED</p>
@@ -55,7 +56,7 @@ export default function EmployeeLayout({ children, title, showBackButton = false
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t flex items-center justify-around px-4 py-2" style={{background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderColor: 'var(--phed-border)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))'}}>
+      <nav className="surveyor-bottom-nav fixed bottom-0 left-0 right-0 z-30 border-t flex items-center justify-around px-4 py-2" style={{background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(12px)', borderColor: 'var(--phed-border)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))'}}>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -69,6 +70,13 @@ export default function EmployeeLayout({ children, title, showBackButton = false
                   : 'text-slate-400 hover:text-blue-600'
               }`}
               style={isActive ? {background: 'var(--phed-blue-soft)'} : {}}
+              data-testid={`nav-tab-${
+                item.path === '/employee'
+                  ? 'home'
+                  : item.path === '/employee/properties'
+                    ? 'properties'
+                    : 'water-survey'
+              }`}
             >
               <Icon className="w-5 h-5" />
               <span className="text-xs font-medium">{item.label}</span>

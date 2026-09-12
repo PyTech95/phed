@@ -1,0 +1,134 @@
+{
+  "project_name": "Haryana Public Health Engineering Department (PHED) Water & Sewerage Utility System",
+  "archetype": "Government Utility & Tactical Precision (Swiss High-Contrast + Civic Tech)",
+  "version": "2.0.0",
+  "design_language": {
+    "theme_mode": "light_primary_with_deep_navy_accents",
+    "primary_color": "#0369A1",
+    "primary_dark": "#0C4A6E",
+    "secondary_teal": "#0D9488",
+    "accent_amber": "#D97706",
+    "success_green": "#059669",
+    "bg_base": "#F8FAFC",
+    "card_bg": "#FFFFFF",
+    "card_border": "#E2E8F0",
+    "text_primary": "#0F172A",
+    "text_secondary": "#475569",
+    "logo_asset_path": "/phed-logo.png"
+  },
+  "typography": {
+    "headline_font": "Outfit, Cabinet Grotesk, sans-serif",
+    "body_font": "Inter, system-ui, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "scale": {
+      "h1": "text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight text-slate-800",
+      "h3": "text-lg sm:text-xl font-semibold text-slate-800",
+      "h4": "text-base font-semibold text-slate-700",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "caption": "text-xs font-medium text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "logo_and_graphics_specifications": {
+    "logo_url": "/phed-logo.png",
+    "external_water_graphic": "https://images.unsplash.com/photo-1693907986952-3cd372e4c9d8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHx3YXRlciUyMG1ldGVyJTIwc3VydmV5JTIwaW5mcmFzdHJ1Y3R1cmUlMjB1dGlsaXR5fGVufDB8fHx8MTc4OTIwOTMwOHww&ixlib=rb-4.1.0&q=85",
+    "header_badge": "Government of Haryana | Public Health Engineering Dept (PHED)",
+    "admin_header_style": "High-contrast Deep Navy (#0F2942) with crisp glass blur (backdrop-blur-md), white text, gold emblem accent line",
+    "surveyor_header_style": "Clean White base (#FFFFFF) with 1px border-b (#E2E8F0), prominent PHED logo icon, active town badge, surveyor status toggle"
+  },
+  "surveyor_app_flow": {
+    "bottom_navigation": {
+      "structure": "Fixed 3-tab bottom bar with touch-friendly 64px height and clear visual indicators",
+      "tabs": [
+        {
+          "key": "home",
+          "label": "Home",
+          "icon": "Home",
+          "test_id": "nav-tab-home"
+        },
+        {
+          "key": "properties",
+          "label": "Properties",
+          "icon": "Building2",
+          "test_id": "nav-tab-properties"
+        },
+        {
+          "key": "water_survey",
+          "label": "Water Survey",
+          "icon": "Droplets",
+          "test_id": "nav-tab-water-survey"
+        }
+      ]
+    },
+    "water_survey_tab_requirements": {
+      "excel_queue_view": {
+        "description": "Lists PHED Public Health Excel consumer records requiring physical property verification and linkage",
+        "record_card_fields": [
+          "PHED Consumer Account No / Book No",
+          "Consumer Name & Father/Husband Name",
+          "Address / Mohalla / Ward No",
+          "Connection Type (Water / Sewerage / Both)",
+          "Link Status (Unlinked / Pending 45s / Linked)"
+        ],
+        "test_ids": {
+          "search_input": "phed-consumer-search-input",
+          "filter_status": "phed-consumer-status-filter",
+          "record_item": "phed-consumer-item-",
+          "attach_button": "btn-attach-property-id-"
+        }
+      },
+      "property_linker_modal_flow": {
+        "step_1": "Click on PHED Excel consumer item in Water Survey queue",
+        "step_2": "Open Property ID search drawer/dialog (`data-testid=\"property-linker-dialog\"`)",
+        "step_3": "Type MC Property ID or Owner Name -> query matching MC Property records",
+        "step_4": "Select matching MC Property ID card (`data-testid=\"select-property-card-XXX\"`)",
+        "step_5": "Click Attach Property ID (`data-testid=\"btn-confirm-attach-property\"`) -> submit linkage to database"
+      },
+      "pending_45s_timer_rule": {
+        "feature_name": "45-Second Auto-Pending Status Sync",
+        "description": "When a surveyor attaches a Property ID or updates survey details, an inline live ticker shows 'Pending Verification (Auto-confirm in 45s)' with a visual countdown radial/progress bar",
+        "badge_style": "bg-amber-50 text-amber-800 border-amber-300 animate-pulse",
+        "test_id": "status-pending-45s-timer"
+      }
+    }
+  },
+  "admin_panel_specifications": {
+    "layout_mode": "High Density Grid (Bento Mode B)",
+    "sidebar": "Dark slate navy sidebar with PHED Haryana branding, quick access to PHED Imports, Water Surveys, Submissions, Map View, and Analytics",
+    "dashboard_kpis": [
+      { "id": "kpi-total-consumers", "label": "Total PHED Excel Records", "test_id": "kpi-total-phed-records" },
+      { "id": "kpi-linked-properties", "label": "MC Property ID Linked", "test_id": "kpi-linked-properties" },
+      { "id": "kpi-pending-changes", "label": "Changes Pending (>45s Queue)", "test_id": "kpi-pending-changes" },
+      { "id": "kpi-today-surveys", "label": "Surveys Completed Today", "test_id": "kpi-today-surveys" }
+    ],
+    "review_and_attachment_table": {
+      "actions": [
+        "Upload PHED Excel File",
+        "Manual Property ID Link",
+        "Approve Pending 45s Verification",
+        "Export Linked Mapping CSV/Excel"
+      ]
+    }
+  },
+  "image_urls": {
+    "phed_logo": "/phed-logo.png",
+    "water_survey_hero": "https://images.unsplash.com/photo-1693907986952-3cd372e4c9d8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHx3YXRlciUyMG1ldGVyJTIwc3VydmV5JTIwaW5mcmFzdHJ1Y3R1cmUlMjB1dGlsaXR5fGVufDB8fHx8MTc4OTIwOTMwOHww&ixlib=rb-4.1.0&q=85",
+    "water_meter_field": "https://images.unsplash.com/photo-1565287556637-5e0b3ae88fbd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwyfHx3YXRlciUyMG1ldGVyJTIwc3VydmV5JTIwaW5mcmFzdHJ1Y3R1cmUlMjB1dGlsaXR5fGVufDB8fHx8MTc4OTIwOTMwOHww&ixlib=rb-4.1.0&q=85"
+  },
+  "component_path": "/app/frontend/src/views/employee/WaterSurveyPanel.js",
+  "instructions_to_main_agent": [
+    "1. Replace old/generic graphics with the refreshed Haryana PHED logo (/phed-logo.png) in header, login, admin sidebar, and surveyor app header.",
+    "2. In Surveyor App (Employee Dashboard/Layout), provide a clear 3-point bottom navigation bar: Home (home), Properties (properties), and Water Survey (water_survey).",
+    "3. Under 'Water Survey' tab, render the Public Health PHED Excel uploaded consumer dataset list.",
+    "4. Allow surveyors to click any PHED consumer record, search for an MC Property ID, preview property owner/address details, and attach the Property ID.",
+    "5. Implement the 45-second pending change indicator UI timer ('Change pending approval / auto-syncing in 45s') for newly updated linkages.",
+    "6. Polish the Admin Panel with high-contrast utility dashboard metrics, excel consumer import table, and linked property validation tools.",
+    "7. Add data-testid attributes to all tabs, search inputs, attach buttons, modal triggers, and status badges."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Avoid AI slop, soft transparent dropdowns without backgrounds, and center-everything layouts.",
+    "Ensure contrast meets WCAG AA / APCA standards for field accessibility under sunlight.",
+    "Include data-testid on every interactive button, input, tab, and card.",
+    "Do NOT use transparent backgrounds for header menus or modal overlays."
+  ]
+}

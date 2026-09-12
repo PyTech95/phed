@@ -694,6 +694,140 @@ async def search_consumers(q: str = Query(..., min_length=1), limit: int = 20, u
     return {"results": [consumer_view(c, user) for c in results], "exact_count": len(exact)}
 
 
+@phed_router.get("/survey-consumers")
+async def survey_consumers(
+    search: Optional[str] = None,
+    link_status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 40,
+    user: dict = Depends(get_current_user),
+):
+    """PHED master-data queue used by surveyors before they attach an MC property."""
+    if page < 1 or limit < 1 or limit > 100:
+        raise HTTPException(400, "Invalid page or limit")
+    if link_status not in (None, "unlinked", "linked"):
+        raise HTTPException(400, "link_status must be unlinked or linked")
+    db = get_db()
+    base: Dict[str, Any] = {"is_active": True, "source": {"$ne": "survey"}}
+    clauses: List[dict] = []
+    if not is_officer(user):
+        assigned = await db.properties.find(
+            {
+                "$or": [
+                    {"assigned_employee_id": user["id"]},
+                    {"assigned_employee_ids": user["id"]},
+                ]
+            },
+            {"_id": 0, "id": 1, "colony": 1},
+        ).to_list(None)
+        assigned_ids = [item["id"] for item in assigned]
+        assigned_colonies = list({item.get("colony") for item in assigned if item.get("colony")})
+        visible_records: List[dict] = [{"linked_property_id": {"$in": assigned_ids}}]
+        if assigned_colonies:
+            visible_records.extend(
+                [
+                    {
+                        "linked_property_id": None,
+                        "colony_name": {"$in": assigned_colonies},
+                    },
+                    {
+                        "linked_property_id": {"$exists": False},
+                        "colony_name": {"$in": assigned_colonies},
+                    },
+                    {
+                        "linked_property_id": None,
+                        "locality": {"$in": assigned_colonies},
+                    },
+                    {
+                        "linked_property_id": {"$exists": False},
+                        "locality": {"$in": assigned_colonies},
+                    },
+                ]
+            )
+        clauses.append({"$or": visible_records})
+    if link_status == "unlinked":
+        clauses.append(
+            {
+                "$or": [
+                    {"linked_property_id": None},
+                    {"linked_property_id": {"$exists": False}},
+                ]
+            }
+        )
+    elif link_status == "linked":
+        clauses.append({"linked_property_id": {"$ne": None}})
+    if search and search.strip():
+        term = search.strip()
+        qn = norm_id(term)
+        qt = norm_text(term)
+        connection_refs = await db.phed_connections.distinct(
+            "consumer_ref",
+            {
+                "is_active": True,
+                "connection_number_norm": {"$regex": re.escape(qn)},
+            },
+        )
+        clauses.append(
+            {
+                "$or": [
+                    {"consumer_id_norm": {"$regex": re.escape(qn), "$options": "i"}},
+                    {"consumer_id": {"$regex": re.escape(term), "$options": "i"}},
+                    {"phone_norm": {"$regex": re.escape(qn)}},
+                    {"phone": {"$regex": re.escape(qn)}},
+                    {"name_norm": {"$regex": re.escape(qt), "$options": "i"}},
+                    {"consumer_name": {"$regex": re.escape(qt), "$options": "i"}},
+                    {"fh_name": {"$regex": re.escape(qt), "$options": "i"}},
+                    {"address_norm": {"$regex": re.escape(qt), "$options": "i"}},
+                    {"locality": {"$regex": re.escape(qt), "$options": "i"}},
+                    {"id": {"$in": connection_refs}},
+                ]
+            }
+        )
+    query = {**base}
+    if clauses:
+        query["$and"] = clauses
+    scope_clauses = clauses[:1]
+    scope_query = {**base}
+    if scope_clauses:
+        scope_query["$and"] = scope_clauses
+    total = await db.phed_consumers.count_documents(query)
+    linked_total = await db.phed_consumers.count_documents(
+        {**scope_query, "linked_property_id": {"$ne": None}}
+    )
+    unlinked_total = await db.phed_consumers.count_documents(
+        {
+            **scope_query,
+            "$or": [
+                {"linked_property_id": None},
+                {"linked_property_id": {"$exists": False}},
+            ],
+        }
+    )
+    projection = {"_id": 0, "original_values": 0}
+    items = await db.phed_consumers.find(query, projection).sort(
+        [("ward_number", 1), ("consumer_id", 1)]
+    ).skip((page - 1) * limit).limit(limit).to_list(limit)
+    await attach_connections(items)
+    property_ids = [item["linked_property_id"] for item in items if item.get("linked_property_id")]
+    linked_properties = {}
+    if property_ids:
+        properties = await db.properties.find(
+            {"id": {"$in": property_ids}},
+            {"_id": 0, "id": 1, "property_id": 1, "owner_name": 1, "colony": 1},
+        ).to_list(None)
+        linked_properties = {item["id"]: item for item in properties}
+    for item in items:
+        item["linked_property"] = linked_properties.get(item.get("linked_property_id"))
+    return {
+        "consumers": [consumer_view(item, user) for item in items],
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+        "linked_total": linked_total,
+        "unlinked_total": unlinked_total,
+    }
+
+
 @phed_router.get("/consumers")
 async def list_consumers(
     page: int = 1, limit: int = 25, search: Optional[str] = None, ward_id: Optional[str] = None, colony: Optional[str] = None,

@@ -124,17 +124,24 @@ export default function AdminLayout({ children, title }) {
     <div className="min-h-screen" style={{background: 'var(--phed-bg)'}}>
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="p-3">
+        <div className="admin-brand-panel m-2 p-3" data-testid="admin-brand-panel">
           <div className="flex items-center gap-2">
-            <img 
-              src="/phed-logo.png" 
-              alt="Public Health Engineering Department - (PHED)" 
-              className="w-12 h-12 object-contain rounded-full"
-            />
+            <div className="brand-logo-shell">
+              <img
+                src="/phed-logo.png"
+                alt="PHED Haryana"
+                className="h-12 w-12 object-contain"
+                data-testid="admin-phed-haryana-logo"
+              />
+            </div>
             <div>
-              <h1 className="font-heading font-extrabold text-base leading-none tracking-tight" style={{color: 'var(--phed-blue)'}}>PHED</h1>
-              <p className="text-[10px] leading-tight font-medium mt-0.5" style={{color: 'var(--phed-ink)'}}>Public Health Engineering Department</p>
-              <p className="text-[9px] leading-tight" style={{color: 'var(--phed-muted)'}}>Survey & Notice Distribution</p>
+              <h1 className="font-heading text-base font-extrabold leading-none tracking-tight text-white">
+                PHED Haryana
+              </h1>
+              <p className="mt-1 text-[10px] font-medium leading-tight text-sky-100">
+                Public Health Engineering
+              </p>
+              <p className="text-[9px] leading-tight text-sky-200">Utility operations centre</p>
             </div>
           </div>
         </div>

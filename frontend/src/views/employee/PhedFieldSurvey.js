@@ -18,6 +18,8 @@ import {
   CheckCircle2, ChevronLeft, ChevronRight, Loader2, X, FileText, AlertTriangle, ClipboardList,
 } from 'lucide-react';
 import WaterSurveyPanel from './WaterSurveyPanel';
+import PhedConsumerPropertyLinker from './PhedConsumerPropertyLinker';
+import PhedSurveyConsumerList from './PhedSurveyConsumerList';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
 const PHED = API_URL + '/phed';
@@ -62,9 +64,23 @@ export default function PhedFieldSurvey() {
   const [phedIds, setPhedIds] = useState(new Set()); // property ids matched via PHED (consumer/connection) search
   const [phedSearching, setPhedSearching] = useState(false);
   const [phedSearchError, setPhedSearchError] = useState('');
+  const [consumerRows, setConsumerRows] = useState([]);
+  const [consumerLoading, setConsumerLoading] = useState(false);
+  const [consumerLoadError, setConsumerLoadError] = useState('');
+  const [consumerSearch, setConsumerSearch] = useState('');
+  const [consumerMeta, setConsumerMeta] = useState({
+    total: 0,
+    page: 1,
+    pages: 1,
+    linked_total: 0,
+    unlinked_total: 0,
+  });
+  const [selectedConsumer, setSelectedConsumer] = useState(null);
+  const [initialConsumer, setInitialConsumer] = useState(null);
   const searchInputRef = useRef(null);
   const propertyListRef = useRef(null);
   const missingRouteHandledRef = useRef(false);
+  const consumerRequestRef = useRef(0);
 
   useEffect(() => {
     if (isAdmin || !navigator.geolocation) return;
@@ -88,6 +104,43 @@ export default function PhedFieldSurvey() {
   }, [isAdmin]);
 
   useEffect(() => { loadProps(); }, [loadProps]);
+
+  const loadSurveyConsumers = useCallback(async (pageNumber = 1, append = false) => {
+    const requestId = consumerRequestRef.current + 1;
+    consumerRequestRef.current = requestId;
+    setConsumerLoading(true);
+    setConsumerLoadError('');
+    try {
+      const params = {
+        page: pageNumber,
+        limit: 40,
+        link_status: pendingOnly ? 'unlinked' : undefined,
+        search: consumerSearch.trim() || undefined,
+      };
+      const { data } = await axios.get(`${PHED}/survey-consumers`, { ...H(), params });
+      if (requestId !== consumerRequestRef.current) return;
+      setConsumerRows((current) => (append ? [...current, ...(data.consumers || [])] : (data.consumers || [])));
+      setConsumerMeta({
+        total: data.total || 0,
+        page: data.page || pageNumber,
+        pages: data.pages || 1,
+        linked_total: data.linked_total || 0,
+        unlinked_total: data.unlinked_total || 0,
+      });
+    } catch (error) {
+      if (requestId !== consumerRequestRef.current) return;
+      setConsumerLoadError(error.response?.data?.detail || 'PHED Excel data load नहीं हुआ। फिर कोशिश करें।');
+      if (!append) setConsumerRows([]);
+    } finally {
+      if (requestId === consumerRequestRef.current) setConsumerLoading(false);
+    }
+  }, [consumerSearch, pendingOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (isAdmin) return undefined;
+    const timer = setTimeout(() => loadSurveyConsumers(1, false), 300);
+    return () => clearTimeout(timer);
+  }, [consumerSearch, pendingOnly, isAdmin, loadSurveyConsumers]);
 
   // Water Survey search = PHED (public-health) search: match by Consumer ID, connection no.,
   // phone or name and surface the linked property. (Property tab keeps property-field search.)
@@ -185,8 +238,13 @@ export default function PhedFieldSurvey() {
 
   const returnToSource = () => {
     setSelected(null);
+    setSelectedConsumer(null);
+    setInitialConsumer(null);
     loadProps();
-    if (!propertyId) return;
+    if (!propertyId) {
+      loadSurveyConsumers(1, false);
+      return;
+    }
     navigate(location.state?.returnTo || '/employee/phed-survey', {
       replace: true,
       state: { restoreSearchQuery: location.state?.restoreSearchQuery || '' },
@@ -200,7 +258,39 @@ export default function PhedFieldSurvey() {
         property={selected}
         H={H}
         onBack={returnToSource}
-        onNext={() => loadProps().then((list) => nextPending(list))}
+        onNext={returnToSource}
+        initialConsumer={initialConsumer}
+      />
+    );
+  }
+  if (selectedConsumer && !isAdmin) {
+    return (
+      <PhedConsumerPropertyLinker
+        consumer={selectedConsumer}
+        properties={props}
+        H={H}
+        onBack={() => setSelectedConsumer(null)}
+        onAttached={(property, consumer) => {
+          setSelectedConsumer(null);
+          setInitialConsumer(consumer);
+          setSelected(property);
+        }}
+      />
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <PhedSurveyConsumerList
+        consumers={consumerRows}
+        loading={consumerLoading}
+        error={consumerLoadError}
+        search={consumerSearch}
+        onSearchChange={setConsumerSearch}
+        unlinkedOnly={pendingOnly}
+        onUnlinkedOnlyChange={setPendingOnly}
+        stats={consumerMeta}
+        onChooseConsumer={(consumer) => setSelectedConsumer(consumer)}
+        onLoadMore={() => loadSurveyConsumers(consumerMeta.page + 1, true)}
       />
     );
   }

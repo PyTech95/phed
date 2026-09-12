@@ -136,6 +136,34 @@
     box-shadow: 4px 0 24px rgba(15, 42, 68, 0.04);
 }
 
+.admin-brand-panel {
+    background:
+        linear-gradient(135deg, #0C4A6E 0%, #0F2A44 70%),
+        linear-gradient(90deg, rgba(13, 148, 136, 0.4), transparent);
+    border: 1px solid rgba(125, 211, 252, 0.24);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 20px rgba(12, 74, 110, 0.18);
+}
+
+.brand-logo-shell {
+    display: grid;
+    width: 3.5rem;
+    height: 3.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 4px 12px rgba(2, 6, 23, 0.24);
+}
+
+.surveyor-header {
+    box-shadow: 0 2px 14px rgba(15, 42, 68, 0.06);
+}
+
+.surveyor-bottom-nav {
+    box-shadow: 0 -8px 24px rgba(15, 42, 68, 0.08);
+}
+
 .sidebar-link {
     display: flex;
     align-items: center;

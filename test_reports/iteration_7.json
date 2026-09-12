@@ -1,0 +1,25 @@
+{
+  "summary": "Iter 7 — Verified new Water Survey queue starting from PHED master records + Suman→THS-0003 attach flow end-to-end (backend + frontend 390px) with mandatory admin-unlink cleanup. Backend pytest (4/4 PASS): (a) GET /api/phed/survey-consumers anonymous → 401/403; (b) surveyor1 finds Suman (id 6a07ddc0…, consumer_id 4326479) in link_status=unlinked queue, no source==survey rows leaked, initially linked_property_id null; (c) full link with confirm:true then verify linked, admin unlink returns 200 and Suman reappears in unlinked; (d) invalid link_status returns 400. Frontend Playwright @ 390×844 as surveyor1/Survey@2026 (Thanesar): /employee/phed-survey renders phed-survey-consumer-list (NOT MC property list). Search 'Suman' → row shows 'Suman Devi / 4326479 / Water: 101 / Didar Nagar' with link-status badge 'Attach Property ID' (no Property ID before linking). Click row → phed-consumer-property-linker shows selected-phed-consumer-id='Consumer ID: 4326479'. attach-selected-property-button correctly DISABLED before selection. Property search 'ZZZ-NO-SUCH-999' shows attach-property-empty-state. Search 'THS-0003' → attach-property-result-59bda468… renders with owner 'Verify Owner 3', 'Sector 5, Thanesar', 'Ward Ward 1'. Selecting the card enables Attach button. Attach navigates to WaterSurveyPanel for THS-0003 (property card: THS-0003 / Verify Owner 3 / Sector 5 / mobile 9000000003). Clicking 'हाँ, है' (existing-connection tile) reveals picked-consumer with EXACTLY the PHED Suman prefill: picked-id='4326479', picked-water='101', name 'Suman Devi', Mobile (record) '7206864297', Connection type Domestic — and mobile-input auto-prefilled with '7206864297'. NO submit / approve / reject invoked. Admin unlink executed via /api/phed/consumers/{SUMAN_ID}/unlink returning 200 both in backend test and in Playwright cleanup step; post-cleanup verification: Suman link-status badge back to 'Attach Property ID' in Needs-Property-Link queue. Branding: /phed-logo.png visible on login (login-card logo), surveyor header (data-testid=surveyor-phed-haryana-logo), admin sidebar (data-testid=admin-phed-haryana-logo). Bottom nav tabs render Home, Properties, Water Survey with correct testids nav-tab-home / nav-tab-properties / nav-tab-water-survey. At 390px document.scrollWidth - clientWidth = 0 on both consumer list and linker — no page-level horizontal overflow. No console errors captured during the flow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phed_survey_consumers_iter7.py",
+    "/app/test_reports/pytest/iter7.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/phed.py survey_consumers() correctly excludes source=='survey' via base filter and scopes non-officer users to assigned_employee_id(s) properties + assigned colonies — visibility is enforced server-side, not by client filter. Good.",
+    "link_consumer requires explicit confirm=true (LinkIn) — prevents accidental attach; UI passes this from PhedConsumerPropertyLinker.",
+    "unlink_consumer is admin-only (require_admin) — matches the cleanup contract in this task; the surveyor cannot self-detach, which is desirable.",
+    "PhedFieldSurvey.js is 700+ lines-ish and mixes multiple stages (search / link / attachments / GPS / submit). Consider splitting per-stage components if it grows further (non-blocking).",
+    "WaterSurveyPanel prefills mobile-input from PHED consumer record (7206864297) when existing-connection is chosen — matches spec. Property fallback mobile 9000000003 is shown separately on property card (correct)."
+  ],
+  "updated_files": ["/app/backend/tests/test_phed_survey_consumers_iter7.py"],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (all functional + brand + testid + responsive assertions PASS)"},
+  "test_credentials": "surveyor1/Survey@2026 (Thanesar/THS); admin/Phed#Admin2026! (used only for /consumers/{id}/unlink cleanup).",
+  "seed_data_creation": "None. Suman consumer 6a07ddc0-b263-4786-ab21-13bcdce58f18 was temporarily linked to THS-0003 (59bda468-…) via UI + backend test, then unlinked via admin endpoint at end of every test/flow. Final state verified: Suman unlinked and appears again under Needs Property Link.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Water Survey flow now begins from PHED master queue (phed-survey-consumer-list). Suman→THS-0003 attach + admin-unlink cleanup path is well-covered by /app/backend/tests/test_phed_survey_consumers_iter7.py — safe to run repeatedly (fixtures unlink before AND after each test). If a run leaves Suman attached (e.g. dev interrupted), call POST /api/phed/consumers/6a07ddc0-b263-4786-ab21-13bcdce58f18/unlink with admin token to restore. Login response uses field name 'token' (NOT 'access_token'). Link payload requires property_record_id + confirm: true.",
+  "rca of the issue": "N/A — no defects found."
+}

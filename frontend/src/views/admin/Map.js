@@ -32,6 +32,7 @@ import {
   Camera, AlertTriangle, Lock, UserX, Users, UserMinus, Pencil
 } from 'lucide-react';
 import { Textarea } from '../../components/ui/textarea';
+import PhedMapSurveyDetails from './PhedMapSurveyDetails';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
 
@@ -269,6 +270,7 @@ export default function PropertyMap() {
   const [surveyDialog, setSurveyDialog] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [surveyData, setSurveyData] = useState(null);
+  const [phedDetail, setPhedDetail] = useState(null);
   const [loadingSurvey, setLoadingSurvey] = useState(false);
   const [rejectDialog, setRejectDialog] = useState(false);
   const [rejectRemarks, setRejectRemarks] = useState('');
@@ -651,20 +653,23 @@ export default function PropertyMap() {
     setSelectedProperty(property);
     setLoadingSurvey(true);
     setSurveyDialog(true);
-    
-    try {
-      // Direct fetch submission for this property
-      const response = await axios.get(`${API_URL}/submission/by-property/${property.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setSurveyData(response.data.submission || null);
-    } catch (error) {
-      toast.error('Failed to load survey data');
-      setSurveyData(null);
-    } finally {
-      setLoadingSurvey(false);
+    setSurveyData(null);
+    setPhedDetail(null);
+    const auth = { headers: { Authorization: `Bearer ${token}` } };
+    const [phedResult, legacyResult] = await Promise.allSettled([
+      axios.get(`${API_URL}/phed/property/${property.id}`, auth),
+      axios.get(`${API_URL}/submission/by-property/${property.id}`, auth),
+    ]);
+    if (phedResult.status === 'fulfilled') {
+      setPhedDetail(phedResult.value.data);
     }
+    if (legacyResult.status === 'fulfilled') {
+      setSurveyData(legacyResult.value.data.submission || null);
+    }
+    if (phedResult.status === 'rejected' && legacyResult.status === 'rejected') {
+      toast.error('Survey details load नहीं हो सकीं। फिर कोशिश करें।');
+    }
+    setLoadingSurvey(false);
   };
 
   // Approve survey - stays on same position
@@ -1345,12 +1350,12 @@ export default function PropertyMap() {
                   </div>
                 )}
 
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <p className="text-slate-500">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm">
+                  <p className="shrink-0 text-slate-500">
                     Showing <span className="font-semibold text-slate-900">{filteredProperties.length}</span> properties on map
                   </p>
                   {/* Status Legend — town-wide survey counts (no area selection needed) */}
-                  <div className="flex gap-3 text-xs" data-testid="map-legend-inline">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" data-testid="map-legend-inline">
                     <span className="flex items-center gap-1">
                       <div className="w-3 h-3 rounded-full bg-red-500"></div> Pending {summary ? <b className="text-red-600">{summary.red}</b> : ''}
                     </span>
@@ -1469,13 +1474,13 @@ export default function PropertyMap() {
                     >
                       {/* COMPACT POPUP - Small and on top of all layers */}
                       <Popup 
-                        maxWidth={220} 
-                        minWidth={180}
+                        maxWidth={300}
+                        minWidth={240}
                         className="compact-popup"
                         autoPan={true}
                         keepInView={true}
                       >
-                        <div className="text-xs" style={{ minWidth: '160px' }}>
+                        <div className="text-xs" style={{ minWidth: '220px' }} data-testid={`map-property-popup-${property.id}`}>
                           {/* Header - Serial & Status */}
                           <div className="flex items-center justify-between pb-1 mb-1 border-b border-gray-200">
                             <span className="text-base font-bold text-red-500">
@@ -1484,15 +1489,13 @@ export default function PropertyMap() {
                             {getStatusBadge(property.status)}
                           </div>
                           
-                          {/* Property ID - Same size as Serial */}
-                          <div className="pb-1 mb-1 border-b border-gray-200">
-                            <span className="text-base font-bold text-blue-600">
-                              ID: {property.property_id || '-'}
-                            </span>
-                          </div>
-                          
-                          {/* Owner & Mobile */}
-                          <div className="space-y-1">
+                          <div className="rounded border border-slate-200 bg-slate-50 p-2" data-testid={`map-popup-mc-${property.id}`}>
+                            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-500">MC property</p>
+                            <div className="pb-1 mb-1 border-b border-gray-200">
+                              <span className="text-base font-bold text-blue-600">
+                                Property ID: {property.property_id || '-'}
+                              </span>
+                            </div>
                             <div className="flex items-center gap-1">
                               <User className="w-3 h-3 text-gray-400" />
                               <span className="font-medium text-gray-900 truncate">{property.owner_name || 'N/A'}</span>
@@ -1501,6 +1504,22 @@ export default function PropertyMap() {
                               <Phone className="w-3 h-3 text-blue-400" />
                               <a href={`tel:${property.mobile}`} className="text-blue-600 font-mono">{property.mobile || 'N/A'}</a>
                             </div>
+                          </div>
+
+                          <div className="mt-2 rounded border border-teal-200 bg-teal-50 p-2" data-testid={`map-popup-phed-${property.id}`}>
+                            <p className="mb-1 text-[10px] font-semibold uppercase text-teal-700">PHED linked data</p>
+                            {property.phed_consumer_id ? (
+                              <>
+                                <p className="font-mono font-semibold text-teal-800">
+                                  Consumer ID: {property.phed_consumer_id}
+                                </p>
+                                <p className="mt-0.5 truncate text-slate-700">
+                                  {property.phed_consumer_name || 'PHED consumer'}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-slate-500">No PHED consumer linked</p>
+                            )}
                           </div>
                           
                           {/* Area & Amount - Compact grid */}
@@ -1525,9 +1544,10 @@ export default function PropertyMap() {
                             size="sm"
                             className="w-full mt-2 h-7 text-xs bg-blue-600 hover:bg-blue-700"
                             onClick={() => handleViewSurvey(property)}
+                            data-testid={`view-phed-survey-${property.id}`}
                           >
                             <Eye className="w-3 h-3 mr-1" />
-                            View Survey Data
+                            View PHED Survey Data
                           </Button>
                         </div>
                       </Popup>
@@ -1634,15 +1654,17 @@ export default function PropertyMap() {
 
         {/* Survey View Dialog - with high z-index to appear above map */}
         <Dialog open={surveyDialog} onOpenChange={setSurveyDialog}>
-          <DialogContent 
-            className="max-w-2xl max-h-[85vh] overflow-y-auto z-[9999]" 
+          <DialogContent
+            className="z-[9999] max-h-[85vh] w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto sm:max-w-2xl"
             style={{zIndex: 9999}}
             onInteractOutside={() => setSurveyDialog(false)}
           >
             <DialogHeader className="pb-2 border-b">
               <DialogTitle className="text-base font-semibold flex items-center justify-between pr-8">
                 <span>Survey Data</span>
-                {surveyData && getStatusBadge(surveyData.status)}
+                {phedDetail?.survey
+                  ? getStatusBadge(phedDetail.survey.status)
+                  : surveyData && getStatusBadge(surveyData.status)}
               </DialogTitle>
             </DialogHeader>
 
@@ -1650,6 +1672,8 @@ export default function PropertyMap() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
               </div>
+            ) : (phedDetail?.survey || (phedDetail?.consumers || []).length > 0) ? (
+              <PhedMapSurveyDetails detail={phedDetail} fallbackProperty={selectedProperty} />
             ) : surveyData ? (
               <div className="space-y-2 text-sm">
                 {/* Property ID Header - Compact */}

@@ -1129,6 +1129,32 @@ async def get_map_properties(
                 prop["has_submission"] = True
             else:
                 prop["has_submission"] = False
+
+        phed_consumers = await get_db().phed_consumers.find(
+            {"linked_property_id": {"$in": prop_ids}, "is_active": True},
+            {
+                "_id": 0,
+                "id": 1,
+                "linked_property_id": 1,
+                "consumer_id": 1,
+                "consumer_name": 1,
+                "phone": 1,
+                "source": 1,
+            },
+        ).to_list(None)
+        phed_by_property = {}
+        for consumer in phed_consumers:
+            property_id = consumer.get("linked_property_id")
+            existing = phed_by_property.get(property_id)
+            if existing is None or existing.get("source") == "survey":
+                phed_by_property[property_id] = consumer
+        for prop in unique_properties:
+            consumer = phed_by_property.get(prop["id"])
+            if consumer:
+                prop["phed_consumer_id"] = consumer.get("consumer_id")
+                prop["phed_consumer_name"] = consumer.get("consumer_name")
+                prop["phed_consumer_mobile"] = consumer.get("phone")
+                prop["phed_consumer_source"] = consumer.get("source")
     
     return {
         "properties": unique_properties,

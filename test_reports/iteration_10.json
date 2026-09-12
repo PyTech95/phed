@@ -1,0 +1,22 @@
+{
+  "summary": "Retested PHED Property Map detail bug at 390px after main agent added flex-wrap/gap-y to legend parent (Map.js line 1353) and to map-legend-inline. All 5 required checks PASS. Overflow measurement (documentElement.scrollWidth - clientWidth) is 0 both BEFORE opening any dialog and AFTER opening the PHED survey details dialog. Legend row wraps and still displays Pending/Surveyed/Approved/Total. PHED detail dialog shows THS-0001, Verify Owner 1, PROV-THS-0001, PL0001, Submitted, Property Locked. All expected testids present. Desktop 1920px route also renders with 0 overflow. No new console errors, no data mutations.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Map.js is still 2015 lines and should be split into smaller modules (marker popup, legend, colony selector, action bar) for maintainability. Not blocking this bug fix."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% (5/5 checks passed)"},
+  "test_credentials": "admin / Phed#Admin2026! (read-only, no mutations performed)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Overflow fix at /app/frontend/src/views/admin/Map.js line 1353 (flex-wrap gap-x-3 gap-y-2 on parent + flex-wrap on map-legend-inline) is confirmed working at 390px. Test steps: login admin -> /admin/map with Thanesar/Didar Nagar, click leaflet marker for THS-0001 (property_id 6abd2d41-a7fc-479d-992a-3a72558b30aa), then view-phed-survey button. Verify document.documentElement.scrollWidth - clientWidth === 0 in both states. All data testids (map-legend-inline, phed-map-survey-details, map-phed-survey-reference, map-phed-survey-status, map-phed-field-decision) render.",
+  "rca of the issue": "Iteration 9 correctly identified page-level 19px overflow at 390px caused by non-wrapping flex row containing map-legend-inline in Map.js:1353. Main agent applied fix: parent now uses `flex-wrap items-center justify-between gap-x-3 gap-y-2` and legend inline uses `flex-wrap gap-x-3 gap-y-1`. Retest confirms: overflow=0 before dialog, overflow=0 after opening PHED survey details dialog, legend still lists Pending/Surveyed/Approved/Total, detail data intact. Bug is RESOLVED."
+}

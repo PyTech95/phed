@@ -1,0 +1,35 @@
+{
+  "summary": "Retest of PHED Map detail dialog at 390px width. The 19px page-level horizontal overflow is STILL present (both before and after the dialog is opened). Root cause is NOT the dialog width (which is now correctly constrained), but the underlying map page header row containing `map-legend-inline`. All required data (MC panel, PHED panel, PL0001, Submitted, Property Locked) still renders correctly; internal dialog content displays fine; no new console errors; desktop path unchanged.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "admin/Map.js -> map-legend-inline row (line ~1353-1370)",
+        "issue": "At 390px viewport with a colony selected, documentElement.scrollWidth - clientWidth = 19px. Culprit is the flex row `<div className='mt-3 flex items-center justify-between text-sm'>` which places the `Showing N properties` text next to `[data-testid=map-legend-inline]` (width ~301px). On a 390px viewport the combined content exceeds available width. Overflow persists even with the PHED dialog CLOSED, proving the recent DialogContent width fix did not address the true source. Dialog itself no longer overflows (its content bounding rect stays within viewport).",
+        "selector": "[data-testid=\"map-legend-inline\"] and its parent flex row",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Property Map (390px)", "issues": ["Legend inline row does not wrap on narrow viewports; add flex-wrap / gap-y to parent, or use flex-col below sm breakpoint. Suggested minimal fix: change parent to `mt-3 flex flex-wrap items-center justify-between gap-y-2 text-sm` and add `flex-wrap` to legend inline div."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix real overflow source in /app/frontend/src/views/admin/Map.js around line 1353: make the parent flex row wrap on small viewports (e.g. add flex-wrap and gap-y-2) OR hide/stack the map-legend-inline below sm breakpoint. The dialog width fix was correct but not the actual cause of the reported 19px overflow.",
+    "After fix, re-run the same test: with PHED dialog open at 390px, documentElement.scrollWidth - clientWidth must be 0."
+  ],
+  "critical_code_review_comments": [
+    "Previous iteration's diagnosis targeted DialogContent width, but overflow is on the underlying page and reproduces with dialog closed. Always confirm overflow source (e.g. iterate DOM for elements with rect.right > clientWidth) before applying fix.",
+    "Map.js is 2015 lines — should be split into smaller focused modules for maintainability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "80% (4/5 checks passed; overflow assertion FAILED)"},
+  "test_credentials": "admin / Phed#Admin2026! (read-only used, no mutations performed)",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "At 390px viewport, /admin/map with Thanesar town + Didar Nagar colony selected produces 19px page overflow due to map-legend-inline row (Map.js line ~1353). Dialog width and content are fine. Verification method: `document.documentElement.scrollWidth - document.documentElement.clientWidth` should equal 0 both before and after opening PHED survey details dialog. Data content already validated: THS-0001, PROV-THS-0001, Verify Owner 1, Ward 1, Didar Nagar, PL0001, Submitted, Property Locked all render.",
+  "rca of the issue": "Page-level horizontal overflow at 390px is caused by the flex row in Map.js (around lines 1353-1370) placing 'Showing N properties' text alongside the legend inline (data-testid=map-legend-inline, measured width ~301px, right edge 409px). No flex-wrap on parent, so the row cannot break, causing horizontal scroll. Reproduction: login as admin -> /admin/map -> select Didar Nagar -> read overflow (=19). Mitigation: Add `flex-wrap gap-y-2` to the parent flex container at line 1353, or stack legend below on <sm breakpoints. The previously applied DialogContent constraint (w-[calc(100vw-1.5rem)] etc.) is correct and should be kept, but is not the cause of this specific overflow."
+}

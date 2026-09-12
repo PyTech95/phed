@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 8 — Verified Admin Property Map popup + PHED map detail fix for THS-0001 (Didar Nagar). Backend pytest 5/5 PASS (/app/backend/tests/test_map_phed_iter8.py, junit: /app/test_reports/pytest/iter8.xml): (a) anonymous GET /api/map/properties -> 403; (b) anonymous GET /api/phed/property/{id} -> 403; (c) admin GET /api/map/properties?colony=Didar%20Nagar returns THS-0001 marker enriched with phed_consumer_id='PROV-THS-0001', phed_consumer_name='Verify Owner 1', phed_consumer_mobile present; no _id/ObjectId leakage; legacy MC fields (property_id, owner_name, mobile, ward, phed_survey_status) preserved; (d) admin GET /api/phed/property/6abd2d41-... returns property (THS-0001), linked consumers list (>=1), and survey with status='Submitted' + reference containing 'PL0001'; no _id in property/consumers/survey; (e) properties without a linked PHED consumer simply omit phed_consumer_id (no misrepresentation). Frontend Playwright (desktop 1920x1080, admin/Phed#Admin2026!, town Thanesar): opened /admin/map, selected Didar Nagar via Radix Select, clicked THS-0001 marker -> map-property-popup-<id> rendered TWO separate sections: map-popup-mc-<id> ('MC PROPERTY | Property ID: THS-0001 | Verify Owner 1 | 9000000001') and map-popup-phed-<id> ('PHED LINKED DATA | Consumer ID: PROV-THS-0001 | Verify Owner 1'). Clicking view-phed-survey-<id> opened phed-map-survey-details dialog (NOT 'No survey data found'). All required testids present with expected values: map-mc-property-id='THS-0001', map-mc-owner-name='Verify Owner 1', map-mc-mobile='9000000001', map-mc-ward='Ward 1', map-phed-consumer-id='PROV-THS-0001', map-phed-consumer-name='Verify Owner 1', map-phed-survey-reference='PL0001', map-phed-survey-status='Submitted', map-phed-field-decision='Property Locked', map-phed-document-count='0 survey document(s) attached', map-mc-property-details + map-phed-details + map-phed-consumer-data sections rendered. Surveyor decision testid was absent (optional — survey has no explicit surveyor_decision string). No writes performed (no attach/unlink/submit/approve/reject invoked). At 390px with dialog CLOSED: page-level horizontal overflow = 0. At 390px with the PHED detail dialog OPEN: scrollWidth-clientWidth = 19px (minor page-level horizontal overflow caused by the details dialog width).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Map — PHED Survey Data dialog @ 390px", "issues": ["Page-level horizontal overflow of 19px when phed-map-survey-details dialog is open (documentElement.scrollWidth - clientWidth = 19). Dialog opens body/root scroll horizontally. Popup closed = 0 overflow. Consider constraining dialog max-width to 100vw or adding overflow-x:hidden on the dialog wrapper."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_map_phed_iter8.py",
+    "/app/test_reports/pytest/iter8.xml"
+  ],
+  "action_items": [
+    "Minor (optional): constrain the phed-map-survey-details dialog / Radix DialogContent to 100vw at <=390px to remove the 19px horizontal page overflow. Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.get_map_properties() correctly batch-enriches with linked phed_consumers keeping master (source != 'survey') preferred over survey-created rows — matches spec.",
+    "phed.property_phed_section() returns {property, consumers, survey, legacy_submission} with _id excluded via projection — no ObjectId leak.",
+    "Map.js popup separates data-testid map-popup-mc-<id> and map-popup-phed-<id>, and view-phed-survey-<id> triggers dialog that prefers PHED detail whenever survey or linked consumer exists (fix from Iter7 handleViewSurvey verified).",
+    "PhedMapSurveyDetails renders MC + PHED sections cleanly with all required testids; consider adding max-w-[100vw] / w-full sm:max-w-[560px] to DialogContent to guarantee no horizontal overflow at 390px."
+  ],
+  "updated_files": ["/app/backend/tests/test_map_phed_iter8.py", "/app/test_reports/iteration_8.json"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "95% (all functional + testid + integration assertions PASS; 1 minor 19px horizontal overflow when dialog open at 390)"},
+  "test_credentials": "admin/Phed#Admin2026! (town Thanesar/THS) — read-only. No write API called.",
+  "seed_data_creation": "None. THS-0001 (6abd2d41-a7fc-479d-992a-3a72558b30aa) already carried PROV-THS-0001 + PL0001 (provisional/survey-sourced test data as permitted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 8 covers /api/map/properties enrichment + /api/phed/property/{id} + admin map popup + PhedMapSurveyDetails dialog. Reuse /app/backend/tests/test_map_phed_iter8.py. The colony dropdown is a Radix Select (button:has-text('Select Colony')) not a native <select>. THS-0001 marker is the only Didar Nagar marker at present. The only outstanding finding is a 19px horizontal page overflow at 390px when the PHED survey details dialog is open — safe to fix by main agent with DialogContent width constraint.",
+  "rca of the issue": "Original bug (Iter 7-user-report): Map popup only rendered legacy MC fields and clicking View Survey called /submission/by-property, which returned nothing for pure-PHED properties -> 'No survey data found'. Main-agent fix: (1) get_map_properties enriches markers with linked phed_consumer fields; (2) admin Map.handleViewSurvey now independently fetches /api/phed/property/{id} and preferentially renders PhedMapSurveyDetails when a PHED survey or linked consumer exists, falling back to legacy submission otherwise; (3) popup now renders map-popup-mc-<id> and map-popup-phed-<id> as separate sections. Iter 8 confirms all three fixes end-to-end; the /submission/by-property misroute is no longer reachable for THS-0001."
+}

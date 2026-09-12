@@ -6,7 +6,7 @@ import logging
 import math
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
@@ -1764,8 +1764,20 @@ async def my_surveys(status: Optional[str] = None, page: int = 1, limit: int = 3
 
 
 @phed_router.get("/surveys")
-async def list_surveys(status: Optional[str] = None, surveyor_id: Optional[str] = None, ward_id: Optional[str] = None, colony: Optional[str] = None,
-                       search: Optional[str] = None, queue: Optional[str] = None, page: int = 1, limit: int = 30, user: dict = Depends(get_current_user)):
+async def list_surveys(
+    status: Optional[str] = None,
+    surveyor_id: Optional[str] = None,
+    ward_id: Optional[str] = None,
+    colony: Optional[str] = None,
+    connection_type: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+    queue: Optional[str] = None,
+    page: int = 1,
+    limit: int = 30,
+    user: dict = Depends(get_current_user),
+):
     require_officer(user)
     q: Dict[str, Any] = {}
     if queue == "pending":
@@ -1774,14 +1786,67 @@ async def list_surveys(status: Optional[str] = None, surveyor_id: Optional[str] 
         q["status"] = status
     if surveyor_id: q["surveyor_id"] = surveyor_id
     if ward_id: q["ward_id"] = ward_id
-    if colony: q["colony_name"] = colony
+    if colony and colony.strip():
+        q["colony_name"] = {
+            "$regex": f"^{re.escape(colony.strip())}$",
+            "$options": "i",
+        }
+    if date_from or date_to:
+        submitted_date: Dict[str, str] = {}
+        for date_value, operator in ((date_from, "$gte"), (date_to, "$lt")):
+            if not date_value:
+                continue
+            try:
+                date_obj = datetime.fromisoformat(date_value).date()
+            except ValueError:
+                raise HTTPException(400, "Dates must use YYYY-MM-DD format")
+            if operator == "$gte":
+                submitted_date[operator] = f"{date_obj.isoformat()}T00:00:00"
+            else:
+                next_day = date_obj + timedelta(days=1)
+                submitted_date[operator] = f"{next_day.isoformat()}T00:00:00"
+        q["submitted_at"] = submitted_date
+    connection_filters = {
+        "PROPERTY_LOCKED": {"water.property_locked": True},
+        "OWNER_DENIED": {"water.owner_denied": True},
+        "SEWER_CONNECTION": {
+            "$or": [
+                {"water.has_sewer": True},
+                {"water.sewer_connection_numbers.0": {"$exists": True}},
+            ]
+        },
+        "ALREADY_CONNECTION": {"water.has_connection": True},
+        "NEW_CONNECTION": {
+            "$or": [
+                {"water.new_connection": True},
+                {"survey_type": "NO_CONNECTION"},
+            ]
+        },
+        "DEATH_TRANSFER": {"water.owner_change": "DEATH_TRANSFER"},
+        "OWNERSHIP_CHANGE": {"water.owner_change": "OWNERSHIP_CHANGE"},
+        "WATER_CONNECTION": {
+            "$and": [
+                {"water.has_connection": True},
+                {"water.connection_numbers.0": {"$exists": True}},
+            ]
+        },
+    }
+    if connection_type:
+        filter_for_connection = connection_filters.get(connection_type)
+        if filter_for_connection is None:
+            raise HTTPException(400, "Invalid connection type filter")
+        q.setdefault("$and", []).append(filter_for_connection)
     if search and search.strip():
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}
         q["$or"] = [{"reference_number": rx}, {"property_id": rx}, {"water.consumer_id": rx},
                     {"water.consumer_name": rx}, {"water.new_owner_name": rx}, {"water.connection_numbers": rx}]
     total = await get_db().phed_surveys.count_documents(q)
     items = await get_db().phed_surveys.find(q, {"_id": 0}).sort("updated_at", -1).skip((page - 1) * limit).limit(limit).to_list(None)
-    return {"surveys": [survey_public(s) for s in items], "total": total, "pages": (total + limit - 1) // limit}
+    return {
+        "surveys": [survey_public(s) for s in items],
+        "total": total,
+        "pages": (total + limit - 1) // limit,
+    }
 
 
 @phed_router.get("/map-summary")
@@ -2287,9 +2352,37 @@ async def filter_options(user: dict = Depends(get_current_user)):
     colonies = sorted(c for c in await db.properties.distinct("colony") if c)
     surveyor_ids = await db.phed_surveys.distinct("surveyor_id")
     surveyors = await db.phed_surveys.aggregate([{"$group": {"_id": "$surveyor_id", "name": {"$first": "$surveyor_name"}}}]).to_list(None)
-    return {"wards": wards, "colonies": colonies, "surveyors": [{"id": s["_id"], "name": s["name"]} for s in surveyors if s["_id"] in surveyor_ids],
-            "services": SERVICES, "categories": CATEGORIES, "statuses": ["Draft", "Submitted", "Requires Review", "Document Pending", "Approved", "Rejected"],
-            "sources": [["imported", "Existing (imported)"], ["survey", "New / unlisted"]], "linked": [["yes", "Linked to property"], ["no", "Not linked"]]}
+    return {
+        "wards": wards,
+        "colonies": colonies,
+        "surveyors": [
+            {"id": surveyor["_id"], "name": surveyor["name"]}
+            for surveyor in surveyors
+            if surveyor["_id"] in surveyor_ids
+        ],
+        "services": SERVICES,
+        "categories": CATEGORIES,
+        "statuses": [
+            "Draft",
+            "Submitted",
+            "Requires Review",
+            "Document Pending",
+            "Approved",
+            "Rejected",
+        ],
+        "survey_connection_types": [
+            ["PROPERTY_LOCKED", "Property locked"],
+            ["OWNER_DENIED", "Owner denied"],
+            ["WATER_CONNECTION", "Water connection"],
+            ["SEWER_CONNECTION", "Sewer connection"],
+            ["ALREADY_CONNECTION", "Already connection"],
+            ["NEW_CONNECTION", "New connection"],
+            ["DEATH_TRANSFER", "Death transfer"],
+            ["OWNERSHIP_CHANGE", "Ownership change"],
+        ],
+        "sources": [["imported", "Existing (imported)"], ["survey", "New / unlisted"]],
+        "linked": [["yes", "Linked to property"], ["no", "Not linked"]],
+    }
 
 
 @phed_router.get("/audit")

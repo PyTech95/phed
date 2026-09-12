@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 5 verified the PHED Survey Review filter enhancements end-to-end. Backend pytest (9/9 PASS via /app/backend/tests/test_phed_review_filters_iter5.py against external URL): (1) GET /api/phed/filters returns exactly the 8 expected survey_connection_types tuples [PROPERTY_LOCKED..OWNERSHIP_CHANGE] with correct labels; (2) GET /api/phed/surveys returns 200 with baseline; (3) colony filter is case-insensitive & trimmed (variants 'Didar Nagar', 'didar nagar', '  DIDAR NAGAR  ' all match); (4) date_from=date_to=2026-09-12 inclusively returns PL0001; (5) malformed date returns 400; (6) all 8 connection_type values return 200 (no 500s); (7) invalid connection_type returns 400; (8) combined date+PROPERTY_LOCKED returns exactly PL0001 with owner_name='Verify Owner 1', mobile 9000000001, ward '27', colony 'Didar Nagar', status Submitted, submitted_at starts 2026-09-12, water.property_locked=true; (9) unauth rejected. Frontend Playwright (admin @ Thanesar, 1920x1080 then 390x844): all 8 filter data-testids (survey-search-input, survey-filter-status/ward/surveyor/colony/date-from/date-to/connection-type) present. Applying From 2026-09-12 + To 2026-09-12 + 'Property locked' yielded exactly 1 row (PL0001) with UI cells: consumer-id '—', name 'Verify Owner 1', mobile '9000000001', ward '27', colony 'Didar Nagar', surveyor 'Surveyor One', connection badge 'Property Locked', status 'Submitted', submitted '9/12/2026'. Ward is 27 (NOT 1) as clarified by main agent. At 390px viewport, document.scrollWidth-clientWidth = 0 (no page-level horizontal overflow) and the table sits inside its own horizontal scroller (parent clientWidth=356, scrollWidth=947). Code review of consumerIdOf() and connectionLabel() in PhedSurveys.js confirms deterministic precedence (property_locked > owner_denied > DEATH_TRANSFER > OWNERSHIP_CHANGE > new_connection/NO_CONNECTION -> 'New Connection' > water+sewer > sewer > water/has_connection/WATER_CONNECTION -> 'Already Connection', else '—'); consumerIdOf returns 'New Connection' only for new-connection outcome/type and water.consumer_id otherwise (never a slash or connection-number fallback). Only PL0001 exists in the dataset today; no other connection_type currently has data (total=0 for the remaining 7) which is expected per the review instructions — this is data coverage, not a product defect. No records were modified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phed_review_filters_iter5.py",
+    "/app/test_reports/pytest/iter5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "phed.py list_surveys() correctly parses YYYY-MM-DD via datetime.fromisoformat, applies inclusive $lt next-day upper bound, raises 400 on bad format, and uses $and-append for connection_type so it composes cleanly with any $or from search. Good pattern.",
+    "filter_options() exposes exactly the 8 required tuples in the correct order. Labels match request.",
+    "PhedSurveys.js connectionLabel() precedence matches the spec (locked > denied > death > ownership > new > water+sewer > sewer > already > —). consumerIdOf() only returns 'New Connection' for new-connection surveys and never falls back to a water connection number.",
+    "phed.py remains large (>2400 lines); non-blocking recommendation to split into domain modules."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all UI assertions PASS)"},
+  "test_credentials": "admin / Phed#Admin2026! (Thanesar/THS). Read-only.",
+  "seed_data_creation": "None. PL0001 / THS-0001 / 6abd2d41-a7fc-479d-992a-3a72558b30aa unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "PHED Survey Review filters (colony, date_from/to, connection_type) verified deterministic and working end-to-end. Only PL0001 exists so only PROPERTY_LOCKED has data — do not treat empty rows for other decisions as bugs. Expected row for date 2026-09-12 + Property Locked: ref PL0001, name 'Verify Owner 1', mobile 9000000001, ward 27 (NOT 1), colony 'Didar Nagar', Surveyor One, Submitted, '—' for Consumer ID (correct since not a new-connection). connectionLabel/consumerIdOf precedence covered by code review.",
+  "rca of the issue": "N/A — no defects found. The prior smoke expectation of 'Ward 1' was incorrect; actual stored ward for PL0001 is '27' and colony 'Didar Nagar'."
+}

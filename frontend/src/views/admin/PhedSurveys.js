@@ -27,17 +27,28 @@ const API_URL = process.env.REACT_APP_BACKEND_URL + '/api';
 const PHED = API_URL + '/phed';
 const ANY = '__any__';
 
-const TYPE_LABEL = { EXISTING_LINKED: 'Existing linked', NEW_UNLISTED: 'New / unlisted', NO_CONNECTION: 'New Connection', WATER_CONNECTION: 'Water connection' };
-// What the surveyor actually recorded (outcome takes priority over the raw type)
-const surveyTypeLabel = (s) => {
+const connectionLabel = (s) => {
   const w = s.water || {};
-  if (w.new_connection || s.survey_type === 'NO_CONNECTION') return 'New Connection';
   if (w.property_locked) return 'Property Locked';
   if (w.owner_denied) return 'Owner Denied';
-  return TYPE_LABEL[s.survey_type] || s.survey_type || '—';
+  if (w.owner_change === 'DEATH_TRANSFER') return 'Death Transfer';
+  if (w.owner_change === 'OWNERSHIP_CHANGE') return 'Ownership Change';
+  const hasWater = (w.connection_numbers || []).length > 0;
+  const hasSewer = w.has_sewer || (w.sewer_connection_numbers || []).length > 0;
+  if (w.new_connection || s.survey_type === 'NO_CONNECTION') return 'New Connection';
+  if (hasWater && hasSewer) return 'Water + Sewer Connection';
+  if (hasSewer) return 'Sewer Connection';
+  if (hasWater || w.has_connection || s.survey_type === 'WATER_CONNECTION') {
+    return 'Already Connection';
+  }
+  return '—';
 };
-const consumerIdOf = (s) => (s.water?.consumer_id) || (Array.isArray(s.water?.connection_numbers) && s.water.connection_numbers[0]) || '—';
+const consumerIdOf = (s) => {
+  if (s.water?.new_connection || s.survey_type === 'NO_CONNECTION') return 'New Connection';
+  return s.water?.consumer_id || '—';
+};
 const nameOf = (s) => (s.water?.new_owner_name) || (s.water?.consumer_name) || s.owner_name || '—';
+const mobileOf = (s) => s.water?.mobile || s.water?.phone || '—';
 const STATUS_STYLE = {
   Approved: 'bg-green-100 text-green-700', Submitted: 'bg-blue-100 text-blue-700',
   Rejected: 'bg-red-100 text-red-700', Draft: 'bg-slate-100 text-slate-600', 'In Progress': 'bg-amber-100 text-amber-700',
@@ -55,7 +66,16 @@ export default function PhedSurveys() {
   const H = () => ({ headers: getAuthHeader() });
   const isAdmin = user?.role === 'ADMIN';
   const [filters, setFilters] = useState({ wards: [], surveyors: [], statuses: [] });
-  const [f, setF] = useState({ status: ANY, ward_id: ANY, surveyor_id: ANY, search: '' });
+  const [f, setF] = useState({
+    status: ANY,
+    ward_id: ANY,
+    colony: '',
+    surveyor_id: ANY,
+    connection_type: ANY,
+    date_from: '',
+    date_to: '',
+    search: '',
+  });
   const [searchInput, setSearchInput] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [rows, setRows] = useState(null);
@@ -206,7 +226,8 @@ export default function PhedSurveys() {
 
   return (
     <AdminLayout title="PHED Survey Review">
-      <Card className="clinic-card mb-4"><CardContent className="p-4 grid md:grid-cols-4 gap-3">
+      <Card className="clinic-card mb-4">
+        <CardContent className="grid gap-3 p-4 md:grid-cols-4">
         <div className="md:col-span-1">
           <label className="text-xs font-medium text-slate-500">Search reference / property</label>
           <div className="relative mt-1">
@@ -221,7 +242,49 @@ export default function PhedSurveys() {
           options={[[ANY, 'All wards'], ...(filters.wards || []).map((w) => [w.id, `Ward ${w.ward_number}`])]} testid="survey-filter-ward" />
         <Flt label="Surveyor" value={f.surveyor_id} onChange={(v) => { setPage(1); setF({ ...f, surveyor_id: v }); }}
           options={[[ANY, 'All surveyors'], ...(filters.surveyors || []).map((u) => [u.id, u.name])]} testid="survey-filter-surveyor" />
-      </CardContent></Card>
+        <div>
+          <Label className="text-xs">Colony</Label>
+          <Input
+            list="phed-review-colonies"
+            value={f.colony}
+            placeholder="Search colony name"
+            onChange={(event) => { setPage(1); setF({ ...f, colony: event.target.value }); }}
+            className="mt-1"
+            data-testid="survey-filter-colony"
+          />
+          <datalist id="phed-review-colonies">
+            {(filters.colonies || []).map((colony) => <option key={colony} value={colony} />)}
+          </datalist>
+        </div>
+        <div>
+          <Label className="text-xs">From date</Label>
+          <Input
+            type="date"
+            value={f.date_from}
+            onChange={(event) => { setPage(1); setF({ ...f, date_from: event.target.value }); }}
+            className="mt-1"
+            data-testid="survey-filter-date-from"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">To date</Label>
+          <Input
+            type="date"
+            value={f.date_to}
+            onChange={(event) => { setPage(1); setF({ ...f, date_to: event.target.value }); }}
+            className="mt-1"
+            data-testid="survey-filter-date-to"
+          />
+        </div>
+        <Flt
+          label="Connection / field decision"
+          value={f.connection_type}
+          onChange={(v) => { setPage(1); setF({ ...f, connection_type: v }); }}
+          options={[[ANY, 'All decisions'], ...(filters.survey_connection_types || [])]}
+          testid="survey-filter-connection-type"
+        />
+      </CardContent>
+      </Card>
 
       <Card className="clinic-card"><CardContent className="p-0">
         <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--phed-border)' }}>
@@ -252,11 +315,23 @@ export default function PhedSurveys() {
               <TableHead className="w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleSelAll} disabled={approvableRows.length === 0} data-testid="select-all-surveys" className="w-4 h-4 accent-green-700 cursor-pointer" />
               </TableHead>
-              {['Consumer ID', 'Ref no.', 'Name', 'Surveyor', 'Type', 'Status', 'Submitted', ''].map((h) => <TableHead key={h}>{h}</TableHead>)}
+              {[
+                'Consumer ID',
+                'Ref no.',
+                'Name',
+                'Mobile',
+                'Ward',
+                'Colony',
+                'Surveyor',
+                'Connection',
+                'Status',
+                'Submitted',
+                '',
+              ].map((h) => <TableHead key={h}>{h}</TableHead>)}
             </TableRow></TableHeader>
             <TableBody>
-              {rows === null && <TableRow><TableCell colSpan={9} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></TableCell></TableRow>}
-              {rows?.length === 0 && <TableRow><TableCell colSpan={9} className="text-center py-10 text-slate-500">No surveys yet.</TableCell></TableRow>}
+              {rows === null && <TableRow><TableCell colSpan={12} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></TableCell></TableRow>}
+              {rows?.length === 0 && <TableRow><TableCell colSpan={12} className="text-center py-10 text-slate-500">No surveys yet.</TableCell></TableRow>}
               {rows?.map((s) => (
                 <TableRow key={s.id} data-testid={`survey-row-${s.id}`}>
                   <TableCell>
@@ -267,10 +342,13 @@ export default function PhedSurveys() {
                   <TableCell className="font-mono text-xs" data-testid={`consumer-id-${s.id}`}>{consumerIdOf(s)}</TableCell>
                   <TableCell className="font-mono text-xs font-bold text-blue-700" data-testid={`ref-${s.id}`}>{s.reference_number || '—'}</TableCell>
                   <TableCell className="text-sm" data-testid={`name-${s.id}`}>{nameOf(s)}</TableCell>
-                  <TableCell className="text-xs text-slate-500">{s.surveyor_name || '—'}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-[10px]">{surveyTypeLabel(s)}</Badge></TableCell>
-                  <TableCell><Badge className={`text-[10px] ${STATUS_STYLE[s.status] || ''}`}>{s.status}</Badge></TableCell>
-                  <TableCell className="text-xs text-slate-500">{s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : '—'}</TableCell>
+                  <TableCell className="font-mono text-xs" data-testid={`mobile-${s.id}`}>{mobileOf(s)}</TableCell>
+                  <TableCell className="text-xs" data-testid={`ward-${s.id}`}>{s.ward_number || '—'}</TableCell>
+                  <TableCell className="max-w-36 truncate text-xs" data-testid={`colony-${s.id}`}>{s.colony_name || '—'}</TableCell>
+                  <TableCell className="text-xs text-slate-500" data-testid={`surveyor-${s.id}`}>{s.surveyor_name || '—'}</TableCell>
+                  <TableCell data-testid={`connection-${s.id}`}><Badge variant="outline" className="text-[10px]">{connectionLabel(s)}</Badge></TableCell>
+                  <TableCell data-testid={`status-${s.id}`}><Badge className={`text-[10px] ${STATUS_STYLE[s.status] || ''}`}>{s.status}</Badge></TableCell>
+                  <TableCell className="text-xs text-slate-500" data-testid={`submitted-${s.id}`}>{s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : '—'}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       {['Submitted', 'Requires Review', 'Document Pending'].includes(s.status) && (
@@ -304,7 +382,7 @@ export default function PhedSurveys() {
             <div className="space-y-5 text-sm">
               <div className="flex flex-wrap gap-2">
                 <Badge className={STATUS_STYLE[detailSurvey.status]}>{detailSurvey.status}</Badge>
-                <Badge variant="outline">{surveyTypeLabel(detailSurvey)}</Badge>
+                <Badge variant="outline">{connectionLabel(detailSurvey)}</Badge>
                 <Badge variant="outline">Surveyor: {detailSurvey.surveyor_name || '—'}</Badge>
                 {detailSurvey.ward_number && <Badge variant="outline">Ward {detailSurvey.ward_number}</Badge>}
               </div>

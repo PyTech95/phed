@@ -48,3 +48,11 @@ Public Health Engineering Department (Haryana) field-survey & notice-distributio
 - User reported map/admin/surveyor views all showing zero after deploy. Investigation: this pod's MongoDB was FRESH (0 properties, 0 surveyors) — previous session's data (55k records, users) lives in the old pod/VPS, never existed here.
 - Verified map pipeline is healthy: created surveyor1 (Surveyor@2026, THS) + seeded 6 demo props (seed_test_props.py, colony Masita House, Ward 1). Testing agent iteration_7: admin map 6 markers, surveyor map 6 red pending pins, dashboard stats, assignment names — ALL 100%.
 - KEY for VPS (phed.nstuindia.com): new build defaults TOWN_DB_MODE=single (prefixed collections in main DB). Legacy VPS towns (e.g. BHD) live in separate DBs (nstu_town_bhd). If VPS .env lacks TOWN_DB_MODE=multi, non-THS towns read empty prefixed collections → map zero. FIX: set TOWN_DB_MODE=multi in VPS backend/.env + restart backend. THS unaffected (TOWN_DB_MAPPING → main DB).
+
+## 2026-09-24 — FIX: Colony selectors zero when town data has no colony names (area fallback)
+- User report: MC property map shows markers but colony selector = 0; bulk-assign colony list = 0 while search finds areas. Cause: their data has colony='' (lost in old VPS import) with only ward/area values; previous "hide ward numbers" change then emptied ALL colony lists.
+- Fix (backend/server.py): `_distinct_area_names()` + `/api/map/colonies` — pure ward numbers ('1','Ward 1') are hidden ONLY when the town has ≥1 real colony; when the town has no colony data, ward/area values are returned as selectable areas. Endpoints fixed: /api/map/colonies, /api/admin/areas, /api/admin/colonies. Bulk-assign/matching already matched ward OR colony.
+- Verified (iteration_8, 100%): colony-less test town DEM (ward 'Ward 2'/'3', colony='') → selectors list areas, markers render on select, bulk-assign works; THS regression → only 'Masita House' shown, ward numbers still hidden; surveyor map unchanged.
+- VPS ACTION NEEDED: sync backend/server.py to phed.nstuindia.com + restart backend (no frontend rebuild required for this fix).
+- Minor UX note (deferred): 'Bulk Assign Colonies' modal title shows 'Bulk Assign by Area' (shared modal).
+- Test town 'Demo Wardless' (DEM, 4 fake props) left in DB as fix demo — safe to delete from Towns UI.

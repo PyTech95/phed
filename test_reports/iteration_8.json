@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 8 — Verified colony/area fallback fix for colony-less towns. Backend curl + admin UI + surveyor UI all pass. DEM (colony-less): /api/map/colonies returns [{'3':2},{'Ward 2':2}] total 4; /api/admin/areas = ['3','Ward 2']; /api/admin/colonies = ['3','Ward 2']. THS (with real colonies): all three endpoints return only ['Masita House'] — ward numbers correctly hidden. Admin UI Property Map for DEM header shows '2 colonies available • 4 total properties'; selector dropdown lists 'All Areas (2 colonies)', '3', 'Ward 2'; selecting Ward 2 renders 2 leaflet markers (Total 2, With GPS 2, Pending 2). DEM Bulk Assign by Area modal combobox lists both '3' and 'Ward 2'. DEM Bulk Assign Colonies opens a modal that lists the same options. THS regression: colony selector shows only 'All Areas (1 colonies)' + 'Masita House'; Masita House selection renders 6 markers; THS Bulk Assign by Area lists only 'Masita House'. Surveyor regression: surveyor1 login → /employee/properties MapLibre map shows 6 red pending markers, 'GPS 6 pending | 0 done', 'Total: 6 properties, Pending 6'. Original bug (colony selectors empty when colony field blank) is fully resolved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Properties → Bulk Assign Colonies modal", "issues": ["Modal title displays 'Bulk Assign by Area' even when opened via the 'Bulk Assign Colonies' button — appears to reuse the same modal component. Options list is correct in both cases but the title should reflect the entry point (or the two buttons should be consolidated). Minor UX inconsistency, not a blocker for the current fix."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_map_phed_iter8.py"],
+  "action_items": [
+    "(Optional / minor) Differentiate the 'Bulk Assign by Area' vs 'Bulk Assign Colonies' modal titles or merge the two buttons — currently both open a modal titled 'Bulk Assign by Area'."
+  ],
+  "critical_code_review_comments": [
+    "_distinct_area_names() fallback logic is correct: hide pure ward numbers only when the town has real colony data, else return ward values. Verified working via both API and UI.",
+    "/api/map/colonies, /api/admin/areas, /api/admin/colonies are per-town cached — main agent's note about ~60s stale window held true (fresh values were returned during this test). Consider adding cache-busting after property inserts/edits so newly created towns/props reflect immediately.",
+    "Frontend admin Map still requires manual colony selection even when only one colony exists (carried over comment from iter7)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / PhedAdmin@2026 (super-admin, has town chooser between THS + DEM), surveyor1 / Surveyor@2026 (assigned town THS)",
+  "seed_data_creation": "None — used the two existing towns THS (6 props, colony 'Masita House', ward 1) and DEM (4 props, colony='', ward 'Ward 2' x2 and '3' x2) seeded by main agent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Super-admin login flow now goes admin → /select-town chooser → click town card → /admin. Selectors: town card is a text element matching the town name ('Thanesar' / 'Demo Wardless'); town switcher button in header has data-testid='town-selector' and to switch you can also just logout and re-login. Admin map colony combobox opens on clicking the '-- Select Colony --' trigger and reveals a search box + role=option list. Surveyor properties UI at /employee/properties uses MapLibre (NOT Leaflet) — do not query '.leaflet-marker-icon'; use the top-bar counter ('6 pending | 0 done') and 'Total: N properties' footer instead, or query '.maplibregl-marker'.",
+  "rca of the issue": "Original bug: when town has no colony data (empty colony field, only ward values), a previous change that hid pure ward numbers ('1', 'Ward 1', '3') from colony-list endpoints caused all colony/area selectors to return empty, so admin Map + Bulk Assign showed zero options even though properties existed. Fix (already applied by main agent in /app/backend/server.py _distinct_area_names + /api/map/colonies): pure ward numbers are hidden only when the town has ≥1 real colony; when the town has no colony data, the ward/area values are surfaced as selectable. Verification: DEM town (colony=''), ward '3' and 'Ward 2' both appear in Map colony selector, Bulk Assign by Area and Bulk Assign Colonies dropdowns; markers render (2 for Ward 2, 2 for '3', 4 for All Areas). THS regression: real colony 'Masita House' is the only option — ward numbers correctly hidden. Surveyor regression: /employee/properties still shows 6 pending markers for THS."
+}

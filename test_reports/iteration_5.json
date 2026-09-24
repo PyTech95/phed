@@ -1,0 +1,22 @@
+{
+  "summary": "Iteration 5: Verified MC PHED upload column-mapping fix against user's real 55,180-row Excel already uploaded as batch 'MC PHED TEST' into town BHD. All 6 pytest tests pass. Backend GET /admin/properties (BHD) returns real values (property_id=3U1136U5, owner_name='Surender Kumar', colony='Azad Nagar PART-1', mobile='9466890875'); total=55,185 (55,180 real + 5 seed). GET /admin/colonies (BHD) returns 100+ real colonies including Azad Nagar PART-1, Akash Nagar, Kirti Nagar, Didar Nagar. GET /admin/areas (BHD) lists same colonies. POST /admin/block-assign-colonies with real colony 'Akash Nagar' + surveyor1 succeeds (modified_count>=1); cleanup unassign OK. Frontend: admin login -> town selector 'BHD' -> /admin/properties shows real owners/PIDs/mobiles in table (0 'Unknown' rows). 'Bulk Assign Colonies' dialog lists real colonies, data-testid='assign-colony-search' correctly filters (typing 'Akash' shows Akash Nagar / Akash Nagar Ext / Akash Nagar PART-1). Selecting 'Akash Nagar' + 'Rahul Surveyor' + Assign returns success toast; cleanup Bulk Unassign Colonies also succeeds. Regression: THS colonies list (9 items) and THS properties list (10 items) still work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_mc_upload_iter5.py",
+    "/app/test_reports/pytest/iter5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Bulk Assign Colonies dialog colony list mixes ward numbers ('1','17','18','19') with actual colony names because /admin/colonies returns union(ward, colony). Consider tagging each item with its source (ward vs colony) in the UI, or separate endpoints, so surveyors don't accidentally select ward numbers as if they were colonies. Same behaviour was noted in iter4 review.",
+    "GET /admin/properties?colony=<name> filter appeared not applied at DB layer in iter4; not re-checked this round but still open."
+  ],
+  "updated_files": ["/app/backend/tests/test_mc_upload_iter5.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100%"},
+  "test_credentials": "admin phedadmin/PhedAdmin@2026; surveyor1/Survey@2026",
+  "seed_data_creation": "None. Used existing batch 'MC PHED TEST' (55,180 real rows) plus 5 seed BHD-0001..0005. Test transiently assigned then unassigned 'Akash Nagar' via backend and via UI (cleaned up).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "MC upload column-mapping fix verified end-to-end. Real BHD data: property_id like '3U1136U5', owner_name like 'Surender Kumar', colony like 'Azad Nagar PART-1'. Test file /app/backend/tests/test_mc_upload_iter5.py is reusable regression. Colony list still mixes ward numbers with colony names — pending design decision. BHD table has 55k+ rows: paginated (page size 50), map endpoints may be slow so avoid /admin/map heavy calls in tests.",
+  "rca of the issue": "Root cause was upload_batch (~backend/server.py line 1603) using strict header names ('property_id','owner_name','colony','mobile') that did not match the real Excel's headers 'PID','ONWER','COLONY NAME','MOBILE NO','TOWN'. Fix normalized headers (lowercase, strip non-alphanumerics) and added variants (PID, ONWER/Owner, ColonyName/colony_name/Locality) for both Excel and CSV paths. Verified: real 55,180 rows now persisted with correct property_id/owner_name/colony/mobile fields, unblocking Bulk Assign Colonies dialog which now lists 100+ real colonies."
+}

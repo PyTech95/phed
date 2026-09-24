@@ -1,0 +1,22 @@
+{
+  "short_name": "PHED Survey",
+  "name": "Public Health Engineering Department - (PHED) - Property Survey",
+  "description": "PHED Survey & Notice Distribution System",
+  "icons": [
+    {
+      "src": "phed-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1565C0",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "prefer_related_applications": false
+}

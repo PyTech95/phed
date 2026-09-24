@@ -43,3 +43,8 @@ Public Health Engineering Department (Haryana) field-survey & notice-distributio
 - Verified: /api/health ok+db connected externally; admin JWT login; UI login→/admin dashboard (E2E 100%, iteration_6.json).
 - Deployment scan: only flag = TTL index on login_attempts (by design — ephemeral brute-force lockout tracking, not audit data).
 - User's production VPS phed.nstuindia.com still runs OLD build — see VPS ACTION NEEDED notes above for file sync + re-upload of the 55,180-record batch.
+
+## 2026-09-24 — Bug report: "map पर data नहीं आ रहा, सब zero" → RESOLVED (not a code bug)
+- User reported map/admin/surveyor views all showing zero after deploy. Investigation: this pod's MongoDB was FRESH (0 properties, 0 surveyors) — previous session's data (55k records, users) lives in the old pod/VPS, never existed here.
+- Verified map pipeline is healthy: created surveyor1 (Surveyor@2026, THS) + seeded 6 demo props (seed_test_props.py, colony Masita House, Ward 1). Testing agent iteration_7: admin map 6 markers, surveyor map 6 red pending pins, dashboard stats, assignment names — ALL 100%.
+- KEY for VPS (phed.nstuindia.com): new build defaults TOWN_DB_MODE=single (prefixed collections in main DB). Legacy VPS towns (e.g. BHD) live in separate DBs (nstu_town_bhd). If VPS .env lacks TOWN_DB_MODE=multi, non-THS towns read empty prefixed collections → map zero. FIX: set TOWN_DB_MODE=multi in VPS backend/.env + restart backend. THS unaffected (TOWN_DB_MAPPING → main DB).

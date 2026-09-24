@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 7 — Map-data-visibility bug verification. Backend + UI both confirm the 6 seeded demo properties are visible everywhere. Backend curl: /api/map/colonies -> {Masita House: 6, total 6}; /api/map/properties -> count 6 (all Pending, assigned to Surveyor One); /api/map/employee-properties as surveyor1 -> count 6, mapped_count 6, missing_location_count 0. Frontend UI: (1) Admin /admin/map shows '1 colonies available • 6 total properties', 'Pending 6 / Total 6'; selecting Masita House renders 6 leaflet markers on satellite tiles, stat cards show Total 6, With GPS 6, Pending 6, Residential 6, Not Surveyed 6, assignment 'Surveyor One (0/12)'. (2) Admin /admin dashboard shows Total existing properties 6, PHED target 6, PHED surveys pending 6. (3) Surveyor login -> /employee dashboard shows 6 Total / 6 Pending on Assigned Properties widget. (4) Surveyor bottom-nav Properties -> full map with 6 red pending markers, toast 'Loaded 6 properties', footer 'Total: 6 properties, Pending 6'. The originally reported 'map shows zero everywhere' bug is NOT reproducible — it was purely due to empty DB and is now resolved by seed_test_props.py. Regression on login/dashboard passes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_smoke.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Admin Property Map opens with map already rendered but no colony pre-selected and marker layer empty; UX-wise it would be clearer if the single available colony auto-selects when only one exists (currently user must open the Select Colony dropdown even though the header says '1 colonies available • 6 total properties').",
+    "seed_test_props.py hardcodes DB_NAME default 'test_database' — matches current env but for production seeding should omit defaults and fail fast if unset."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / PhedAdmin@2026, surveyor1 / Surveyor@2026 (see /app/memory/test_credentials.md)",
+  "seed_data_creation": "Used existing seed from main agent — 6 demo properties DEMO-W1-001..006 in colony 'Masita House', Ward 1, town THS, all Pending, all assigned to surveyor1, GPS near 29.9695, 76.8783.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Map pipeline verified end-to-end on iteration 7. Base: https://phed-deploy-1.preview.emergentagent.com. Admin map route /admin/map requires selecting a colony from the '-- Select Colony --' combobox to actually render markers (header stats populate immediately from /api/map/colonies). Surveyor map is at /employee/properties (bottom nav 'Properties'), auto-loads all assigned points via /api/map/employee-properties, uses red icon for Pending. Login selectors: input[placeholder*='sername'], input[type='password'], button[type='submit']. Successful admin -> /admin, surveyor -> /employee.",
+  "rca of the issue": "Original user bug ('map shows zero everywhere after last update') was NOT a code regression. Root cause: this environment's Mongo DB had zero properties/users beyond seeded admin, so /api/map/colonies and /api/map/properties correctly returned empty. Mitigation applied by main agent: created surveyor1 user + ran /app/backend/seed_test_props.py to insert 6 demo properties in Masita House / Ward 1 / THS assigned to surveyor1. After seed, all map endpoints and both admin+surveyor UI views correctly show the 6 properties as verified here."
+}

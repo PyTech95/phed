@@ -1053,6 +1053,9 @@ async def get_colonies_list(request: Request, current_user: dict = Depends(get_c
     result = await town_db.properties.aggregate(pipeline).to_list(None)
     colonies = [{"name": r["_id"], "count": r["count"]} for r in result
                 if r["_id"] and not str(r["_id"]).strip().isdigit() and not re.match(r"(?i)^ward\s*\d+$", str(r["_id"]).strip())]
+    if not colonies:
+        # Town has no colony-named data — fall back to ward/area values so the selector isn't empty
+        colonies = [{"name": r["_id"], "count": r["count"]} for r in result if r["_id"]]
     total = sum(c["count"] for c in colonies)
     
     response = {"colonies": colonies, "total": total}
@@ -3113,19 +3116,23 @@ async def remove_employee_from_colony(
 # ============== SUBMISSIONS ROUTES ==============
 
 async def _distinct_area_names(coll) -> List[str]:
-    """Distinct colony names (ward used only when colony missing). Pure ward numbers hidden."""
+    """Distinct colony names (ward used only when colony missing). Pure ward numbers are
+    hidden when the town has real colony data; shown as selectable areas when it doesn't."""
     pipeline = [
-        {"$project": {"area": {"$cond": [{"$or": [{"$eq": ["$colony", None]}, {"$eq": ["$colony", ""]}]}, "$ward", "$colony"]}}},
-        {"$group": {"_id": "$area"}},
+        {"$project": {
+            "colony": 1,
+            "area": {"$cond": [{"$or": [{"$eq": ["$colony", None]}, {"$eq": ["$colony", ""]}]}, "$ward", "$colony"]}}},
+        {"$group": {"_id": {"colony": "$colony", "area": "$area"}}},
     ]
     rows = await coll.aggregate(pipeline).to_list(None)
+    has_real_colony = any(str((r.get("_id") or {}).get("colony") or "").strip() for r in rows)
     out = set()
     for r in rows:
-        v = str(r.get("_id") or "").strip()
+        v = str((r.get("_id") or {}).get("area") or "").strip()
         if not v:
             continue
-        if v.isdigit() or re.match(r"(?i)^ward\s*\d+$", v):
-            continue  # ward numbers hidden — colony-only lists
+        if has_real_colony and (v.isdigit() or re.match(r"(?i)^ward\s*\d+$", v)):
+            continue  # ward numbers hidden only when real colonies exist
         out.add(v)
     return sorted(out)
 

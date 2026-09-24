@@ -34,3 +34,12 @@ Public Health Engineering Department (Haryana) field-survey & notice-distributio
 ## Prioritized Backlog
 - P1: Monitor initial real user survey submissions and PDF exports.
 - P2: Configure custom domain if requested.
+
+## 2026-09-24 — Deployed phed-main(9).zip to this Emergent environment
+- Synced zip over /app (preserved .env, .git, node_modules). Zip contained NO .env files (no leaked secrets).
+- Frontend is Next.js 15.5 production build (`yarn build` + `next start` :3000 via supervisor) — fixed initial spawn error (missing .next build).
+- Added missing required env to backend/.env: JWT_SECRET (64-byte urlsafe), ADMIN_USERNAME=admin, ADMIN_PASSWORD=PhedAdmin@2026, ENV=production, TOWN_DB_MODE=single.
+- Fresh DB: admin seeded on startup; NO towns/wards/employees yet (seed_wards.py needs the ward-colony Excel from user).
+- Verified: /api/health ok+db connected externally; admin JWT login; UI login→/admin dashboard (E2E 100%, iteration_6.json).
+- Deployment scan: only flag = TTL index on login_attempts (by design — ephemeral brute-force lockout tracking, not audit data).
+- User's production VPS phed.nstuindia.com still runs OLD build — see VPS ACTION NEEDED notes above for file sync + re-upload of the 55,180-record batch.

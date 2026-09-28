@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 9 — Verified viewport-culling perf fix on both surveyor (MapLibre) and admin (Leaflet) maps against the 3006-property PERF seed dataset assigned to surveyor1. Both maps open fast, stay interactive, and only render a viewport-bounded subset of markers while totals/counters reflect the full dataset. All regressions pass (marker click popup, status colors, colony selector, login).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/surveyor_map.png",
+    "/app/test_reports/surveyor_marker_popup.png",
+    "/app/test_reports/admin_map_all_areas.png",
+    "/app/test_reports/admin_masita.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Viewport culling on both maps behaves correctly: surveyor MapLibre renders 12–17 visible markers vs 3006 total; admin Leaflet caps at 1000 and drops to 898/771 after zoom-in/pan.",
+    "Admin map still shows textual 'Showing 3006 properties on map' / 'Property Locations - All Areas' at the section header — this is intentional (full dataset count) but consider adding a tiny hint '(rendering N visible)' near the map so users understand DOM markers are viewport-culled and not a data-loss.",
+    "Surveyor marker click opens a Property Detail sheet (PERF-00003, Approved / green pin verified). Admin marker click opens Leaflet popup and body shows PERF- ID — regression clean.",
+    "Marker style/color: on surveyor MapLibre the marker root has transparent bg (color is applied to inner SVG path, which we did not deep-inspect); visually screenshots show red/yellow/green pins as expected."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "admin / PhedAdmin@2026 (super-admin, picks Thanesar town), surveyor1 / Surveyor@2026 (assigned town THS, 3006 PERF properties)",
+  "seed_data_creation": "None — used the 3006 PERF-xxxxx perf seed already inserted by main agent for surveyor1.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Perf fix verified. Key numbers observed: surveyor MapLibre map at default zoom = 12 markers, after pan = 17, footer 'Total: 3006 properties, Pending 1997'. Admin Leaflet map with All Areas = 1000 markers (safety cap), after 3x zoom-in = 898, after pan = 771, Masita House colony = 715 (all fit inside cap). Marker click popup works on both maps; PERF-00003 shown as Approved. Selectors used: input[placeholder*='sername'], input[type='password'], button[type='submit']; surveyor bottom-nav 'Properties' via get_by_text exact=True; admin sidebar 'Property Map' via get_by_text; admin colony combobox is [role='combobox'] + option get_by_text('All Areas (4 colonies)') / get_by_text('Masita House', exact=True). Marker count queries: document.querySelectorAll('.maplibregl-marker').length (surveyor) and document.querySelectorAll('.leaflet-marker-icon').length (admin).",
+  "rca of the issue": "Original perf bug: both maps rendered every assigned property as a DOM marker (up to 3006+ for surveyor1, 3006 for admin at Thanesar), which froze mobile browsers. Fix applied by main agent: viewport culling in visibleMarkers (surveyor Properties.js) and markersToRender (admin Map.js) useMemo hooks recomputed on onMoveEnd/moveend/zoomend, with safety caps of 800 (surveyor) and 1000 (admin). Verification: DOM marker counts stay far below total (12–17 surveyor / 715–1000 admin), maps stay interactive under 3006-record load, totals/counters still reflect full dataset, marker click + colony selector regressions pass."
+}

@@ -56,3 +56,12 @@ Public Health Engineering Department (Haryana) field-survey & notice-distributio
 - VPS ACTION NEEDED: sync backend/server.py to phed.nstuindia.com + restart backend (no frontend rebuild required for this fix).
 - Minor UX note (deferred): 'Bulk Assign Colonies' modal title shows 'Bulk Assign by Area' (shared modal).
 - Test town 'Demo Wardless' (DEM, 4 fake props) left in DB as fix demo — safe to delete from Towns UI.
+
+## 2026-09-24 — PERF FIX: maps froze on mobile at scale ("slow, nothing opens, surveyors can't use")
+- RCA: backend fast (0.3s, gzip 1.6MB→180KB). Bottleneck was CLIENT-side — both maps rendered up to 2000 (surveyor, maplibre) / all (admin, leaflet) DOM markers at once → mobile browser freeze at real scale (VPS: 50k props, thousands assigned/surveyor).
+- FIX (frontend only): viewport culling on both maps — render only markers inside current visible bounds (+15-20% pad) recomputed on move/zoom, safety cap 800 (surveyor) / 1000 (admin). All marker click/drag/colors + totals unchanged.
+  - employee/Properties.js: mapBounds state + updateBounds() + onLoad/onMoveEnd; visibleMarkers useMemo filters by bounds.
+  - admin/Map.js: BoundsTracker (useMapEvents moveend/zoomend) + markersToRender useMemo; render uses markersToRender.
+- Verified (iteration_9, 100%): with 3006 props, surveyor map DOM markers = 12-17 (was 2000), event-loop delay 0ms, interactive; admin capped 1000→771 after pan; regressions (marker popup, colors, colony selector, login) pass.
+- Cleaned up 3000 PERF-xxxxx test props + 1500 test surveys afterward (DB back to 6 demo props).
+- VPS ACTION NEEDED: sync frontend/src/views/employee/Properties.js + frontend/src/views/admin/Map.js to phed.nstuindia.com, run `yarn build`, restart frontend. This is the fix that makes the app usable for field staff at scale.

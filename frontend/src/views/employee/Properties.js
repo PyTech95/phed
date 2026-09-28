@@ -188,6 +188,7 @@ export default function Properties() {
   });
   const [deviceHeading, setDeviceHeading] = useState(0);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [mapBounds, setMapBounds] = useState(null);
   
   const mapRef = useRef(null);
   const watchIdRef = useRef(null);
@@ -462,14 +463,22 @@ export default function Properties() {
   }, [autoRotate]);
 
   // Save position on map move
+  const updateBounds = useCallback(() => {
+    const map = mapRef.current && mapRef.current.getMap ? mapRef.current.getMap() : null;
+    if (!map) return;
+    const b = map.getBounds();
+    setMapBounds({ west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() });
+  }, []);
+
   const onMoveEnd = useCallback(() => {
+    updateBounds();
     localStorage.setItem('surveyor_map_position', JSON.stringify({
       lat: viewState.latitude,
       lng: viewState.longitude,
       zoom: viewState.zoom,
       bearing: viewState.bearing
     }));
-  }, [viewState]);
+  }, [viewState, updateBounds]);
 
   const refreshLocation = () => {
     navigator.geolocation.getCurrentPosition(
@@ -587,16 +596,25 @@ export default function Properties() {
     return props;
   }, [allProperties, userLocation]);
 
-  // Surveyed pins (yellow/green/amber) are ALWAYS shown at every zoom; pending fill the rest of the cap.
-  // (sortedProperties is pending-first, so a plain slice would hide every done pin on big datasets.)
+  // Viewport culling + safety cap: only render pins inside the visible map area.
+  // Rendering thousands of DOM markers freezes mobile; showing just what's on screen
+  // (typically tens–low hundreds) keeps the map fast even with 50k+ assigned properties.
   const visibleMarkers = useMemo(() => {
     let base = sortedProperties;
     if (mapFilter) base = base.filter(p => p.status === mapFilter); // legend colour filter
-    const CAP = 2000;
+    if (mapBounds) {
+      const padLng = (mapBounds.east - mapBounds.west) * 0.15;
+      const padLat = (mapBounds.north - mapBounds.south) * 0.15;
+      base = base.filter(p =>
+        p.longitude >= mapBounds.west - padLng && p.longitude <= mapBounds.east + padLng &&
+        p.latitude >= mapBounds.south - padLat && p.latitude <= mapBounds.north + padLat
+      );
+    }
+    const CAP = 800;
     const surveyed = base.filter(p => p.status !== 'Pending').slice(0, CAP);
     const pending = base.filter(p => p.status === 'Pending').slice(0, Math.max(0, CAP - surveyed.length));
     return [...surveyed, ...pending];
-  }, [sortedProperties, mapFilter]);
+  }, [sortedProperties, mapFilter, mapBounds]);
 
   if (loading) {
     return (
@@ -620,6 +638,7 @@ export default function Properties() {
           {...viewState}
           onMove={evt => setViewState(evt.viewState)}
           onMoveEnd={onMoveEnd}
+          onLoad={updateBounds}
           style={{ width: '100%', height: '100%' }}
           mapStyle={{
             version: 8,

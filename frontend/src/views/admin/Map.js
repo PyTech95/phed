@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -23,7 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import { formatISTDateTime } from '../../lib/indianDateTime';
 import { toast } from 'sonner';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
@@ -193,6 +193,16 @@ function FitBounds({ properties }) {
   return null;
 }
 
+// Tracks the visible map bounds so we only render on-screen markers (viewport culling).
+function BoundsTracker({ onBounds }) {
+  const map = useMapEvents({
+    moveend: () => { const b = map.getBounds(); onBounds({ west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() }); },
+    zoomend: () => { const b = map.getBounds(); onBounds({ west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() }); },
+  });
+  useEffect(() => { const b = map.getBounds(); onBounds({ west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() }); }, [map, onBounds]);
+  return null;
+}
+
 export default function PropertyMap() {
   const { token } = useAuth();
   const [properties, setProperties] = useState([]);
@@ -200,6 +210,27 @@ export default function PropertyMap() {
   const [surveyFilter, setSurveyFilter] = useState(null); // 'red' | 'yellow' | 'green' | null (legend click filter)
   const [moved, setMoved] = useState(null);
   const [savingMove, setSavingMove] = useState(false);
+  const [mapBounds, setMapBounds] = useState(null);
+
+  const onBounds = useCallback((b) => setMapBounds(b), []);
+
+  // Viewport culling + safety cap: only render markers currently on screen.
+  // Leaflet renders one DOM node per marker, so thousands of markers freeze the browser;
+  // showing just the visible ones keeps big colonies (10k+ props) responsive.
+  const markersToRender = useMemo(() => {
+    let base = surveyFilter
+      ? filteredProperties.filter((p) => surveyColorOf(p.status) === surveyFilter)
+      : filteredProperties;
+    if (mapBounds) {
+      const padLng = (mapBounds.east - mapBounds.west) * 0.2;
+      const padLat = (mapBounds.north - mapBounds.south) * 0.2;
+      base = base.filter(p =>
+        p.longitude >= mapBounds.west - padLng && p.longitude <= mapBounds.east + padLng &&
+        p.latitude >= mapBounds.south - padLat && p.latitude <= mapBounds.north + padLat
+      );
+    }
+    return spreadOverlappingMarkers(base.slice(0, 1000));
+  }, [filteredProperties, surveyFilter, mapBounds]);
 
   const saveMove = async () => {
     if (!moved) return;
@@ -1459,9 +1490,10 @@ export default function PropertyMap() {
                 >
                   {getTileLayer()}
                   <FitBounds properties={filteredProperties} />
+                  <BoundsTracker onBounds={onBounds} />
                   
-                  {/* Property markers with SERIAL NUMBER labels - show ALL for selected colony */}
-                  {spreadOverlappingMarkers(surveyFilter ? filteredProperties.filter((p) => surveyColorOf(p.status) === surveyFilter) : filteredProperties).map((property) => (
+                  {/* Property markers with SERIAL NUMBER labels - viewport-culled for performance */}
+                  {markersToRender.map((property) => (
                     <Marker
                       key={`${property.id}${moved?.id === property.id ? '-moving' : ''}`}
                       position={[property.spreadLat, property.spreadLng]}
